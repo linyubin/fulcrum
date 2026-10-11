@@ -12,10 +12,10 @@
 ;; The release installers must exist under release/ (named as the release
 ;; pipeline produces them: fulcrum-<version>-macos-arm64.zip,
 ;; fulcrum-<version>-macos-x64.zip, fulcrum-<version>-windows-x64.msi,
-;; fulcrum-<version>-linux-x64.tar.gz); the URLs written into the manifest
-;; are $BASE_URL/<name>. Architecture symbols follow the family vocabulary
-;; (arm64/x64) — the same symbols app/update.rkt sends, which
-;; `select-update` matches with `eq?`.
+;; fulcrum-<version>-linux-x64.tar.gz, fulcrum-<version>-linux-arm64.tar.gz);
+;; the URLs written into the manifest are $BASE_URL/<name>. Architecture
+;; symbols follow the family vocabulary (arm64/x64) — the same symbols
+;; app/update.rkt sends, which `select-update` matches with `eq?`.
 
 (require racket/file
          racket/format
@@ -78,17 +78,26 @@
                          (artifact-for (format "fulcrum-~a-windows-x64.msi" version)
                                        'windows 'x64 'msi)
                          (artifact-for (format "fulcrum-~a-linux-x64.tar.gz" version)
-                                       'linux 'x64 'targz))))
+                                       'linux 'x64 'targz)
+                         (artifact-for (format "fulcrum-~a-linux-arm64.tar.gz" version)
+                                       'linux 'arm64 'targz))))
 
 (define private-key (read-ed25519-private-key private-der))
 (define public-key (read-ed25519-public-key public-der))
 (unless (or (file-exists? "dist") (directory-exists? "dist"))
   (make-directory "dist"))
-(define manifest-path (build-path "dist" "manifest.json"))
+;; Canonical name is update-manifest.json (family convention); manifest.json
+;; ships as a byte-identical alias so pre-0.8.0 clients polling the old name
+;; keep updating. Drop the alias once 0.7.x installs are gone from the field
+;; (same transition policy payback used for update-stable.json).
+(define manifest-path (build-path "dist" "update-manifest.json"))
 (call-with-output-file manifest-path #:exists 'truncate/replace
+  (lambda (out) (write-signed-manifest manifest private-key key-id out)))
+(call-with-output-file (build-path "dist" "manifest.json") #:exists 'truncate/replace
   (lambda (out) (write-signed-manifest manifest private-key key-id out)))
 ;; Fail the job if anything about the signed output would be rejected by a
 ;; client verifying with the published public key.
-(call-with-input-file manifest-path
-  (lambda (in) (verify-signed-manifest in public-key #:key-id key-id)))
+(for ([path (in-list (list manifest-path (build-path "dist" "manifest.json")))])
+  (call-with-input-file path
+    (lambda (in) (verify-signed-manifest in public-key #:key-id key-id))))
 (displayln "update manifest signed and verified")

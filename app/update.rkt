@@ -257,7 +257,7 @@
       [else
        (define manifest
          (fetch-update-manifest
-          (string-append (regexp-replace* #rx"/+$" base-url "") "/manifest.json")
+          (string-append (regexp-replace* #rx"/+$" base-url "") "/update-manifest.json")
           (current-update-public-key)
           #:key-id update-key-id
           #:maximum-bytes (* 4 1024 1024)))

@@ -4,6 +4,32 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
+## 0.8.0
+
+Packaging parity release: the release asset set now matches the family
+benchmark (taskly) format-for-format on every platform it ships, and the
+update feed moves to the family-standard file name.
+
+### Added
+
+- **Linux arm64 joins the matrix**: the Linux job is a two-architecture
+  matrix on native `ubuntu-24.04-arm` runners — tar.gz, deb, rpm, AppImage,
+  and portable zip, same recipe as x64
+- **Portable zips for Linux and Windows** (`fulcrum-<version>-linux-<arch>.zip`,
+  `fulcrum-<version>-windows-x64.zip`): rivet release already produced them
+  with their own `.sha256` sidecars; the workflow now hoists them into the
+  release instead of dropping them (the duplicate rivet macOS zip is
+  discarded — the hand-built zip stays)
+
+### Changed
+
+- The signed update feed is now published as `update-manifest.json` (family
+  convention) and carries a Linux arm64 tar.gz entry; a byte-identical
+  `manifest.json` rides along so pre-0.8.0 clients polling the old name
+  keep updating — the alias will be dropped once 0.7.x installs are gone
+  from the field (same transition policy payback used)
+- The site version badge tracks the release again (it had drifted at v0.5.0)
+
 ## 0.7.0
 
 ### Added

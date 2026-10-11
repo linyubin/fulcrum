@@ -1,15 +1,16 @@
 name: Release
 
 # Tag-driven pipeline producing versioned, architecture-suffixed artifacts —
-# fulcrum-<version>-macos-<arch>.dmg + .zip, fulcrum-<version>-windows-x64.msi,
-# fulcrum-<version>-linux-x64.tar.gz plus the native Linux installers
-# (fulcrum-<version>-linux-*.deb/.rpm/.AppImage, named by rivet per ecosystem) —
-# each with a .sha256 checksum, a combined
-# SHA256SUMS, and the signed stable-channel manifest. `raco rivet release
-# --development` exercises the full release flow (package, launch smoke,
-# installer) without platform production signing; production trust rides on
-# the Ed25519-signed channel manifest. The secrets from
-# docs/release-runbook.md switch on Authenticode / Developer ID +
+# fulcrum-<version>-macos-<arch>.dmg + .zip, fulcrum-<version>-windows-x64.msi
+# + .zip, fulcrum-<version>-linux-<arch>.tar.gz/.zip plus the native Linux
+# installers (fulcrum-<version>-linux-*.deb/.rpm/.AppImage, named by rivet per
+# ecosystem) on both x64 and arm64 — each with a .sha256 checksum, a combined
+# SHA256SUMS, and the signed stable-channel manifest (update-manifest.json;
+# a byte-identical manifest.json rides along while pre-0.8.0 clients are in
+# the field). `raco rivet release --development` exercises the full release
+# flow (package, launch smoke, installer) without platform production signing;
+# production trust rides on the Ed25519-signed channel manifest. The secrets
+# from docs/release-runbook.md switch on Authenticode / Developer ID +
 # notarization later via `raco rivet release`.
 
 on:
@@ -72,6 +73,10 @@ jobs:
             platform: linux
             arch: x64
             racket-arch: x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            racket-arch: arm64
     steps:
       - uses: actions/checkout@v4
       - name: Checkout Rivet
@@ -84,7 +89,7 @@ jobs:
         if: matrix.platform == 'linux'
         uses: Bogdanp/setup-racket@v1.15
         with:
-          architecture: x64
+          architecture: ${{ matrix.racket-arch }}
           distribution: full
           variant: CS
           version: '9.3'
@@ -199,16 +204,30 @@ jobs:
             macos)
               mv dist/fulcrum-*.dmg "fulcrum-${VERSION}-macos-${ARCH}.dmg"
               (cd dist && zip -qry "../fulcrum-${VERSION}-macos-${ARCH}.zip" fulcrum.app)
+              # rivet release also leaves a portable zip in dist/; the hand
+              # zip above is the same payload — drop the duplicate.
+              rm -f dist/fulcrum-*-macos-*.zip dist/fulcrum-*-macos-*.zip.sha256
               ;;
             windows)
               mv dist/fulcrum-*-windows-*.msi "fulcrum-${VERSION}-windows-x64.msi"
+              # rivet's portable zip (same payload the msi installs) with
+              # its own sidecar — the update feed's windows artifact shape.
+              test -f "dist/fulcrum-${VERSION}-windows-x64.zip"
+              test -f "dist/fulcrum-${VERSION}-windows-x64.zip.sha256"
+              mv "dist/fulcrum-${VERSION}-windows-x64.zip" \
+                 "dist/fulcrum-${VERSION}-windows-x64.zip.sha256" .
               ;;
             linux)
-              mv dist/fulcrum-*-linux-*.tar.gz "fulcrum-${VERSION}-linux-x64.tar.gz"
+              mv dist/fulcrum-*-linux-*.tar.gz "fulcrum-${VERSION}-linux-${ARCH}.tar.gz"
+              # rivet's portable zip (with its own sidecar) joins the set.
+              test -f "dist/fulcrum-${VERSION}-linux-${ARCH}.zip"
+              test -f "dist/fulcrum-${VERSION}-linux-${ARCH}.zip.sha256"
+              mv "dist/fulcrum-${VERSION}-linux-${ARCH}.zip" \
+                 "dist/fulcrum-${VERSION}-linux-${ARCH}.zip.sha256" .
               # The native installers keep rivet's versioned names (deb arch
-              # amd64, rpm embeds the build number, AppImage x86_64); hoist
-              # them beside the tar.gz so the checksum loop and the artifact
-              # upload glob pick them up.
+              # amd64/arm64, rpm embeds the build number, AppImage
+              # x86_64/aarch64); hoist them beside the tar.gz so the
+              # checksum loop and the artifact upload glob pick them up.
               for f in dist/fulcrum-*.deb dist/fulcrum-*.rpm dist/fulcrum-*.AppImage; do
                 if [ -e "$f" ]; then mv "$f" .; fi
               done
@@ -275,7 +294,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: channel-manifest
-          path: dist/manifest.json
+          path: |
+            dist/update-manifest.json
+            dist/manifest.json
           if-no-files-found: error
 
   github-release:
@@ -291,6 +312,8 @@ jobs:
           set -euo pipefail
           mkdir -p release
           mv artifacts/fulcrum-*/fulcrum-* release/
+          cp artifacts/channel-manifest/update-manifest.json release/
+          # byte-identical alias for pre-0.8.0 clients polling manifest.json
           cp artifacts/channel-manifest/manifest.json release/
           (cd release && cat *.sha256 > SHA256SUMS)
           ls -la release/
@@ -301,4 +324,5 @@ jobs:
           files: |
             release/fulcrum-*
             release/SHA256SUMS
+            release/update-manifest.json
             release/manifest.json
