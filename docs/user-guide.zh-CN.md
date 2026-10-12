@@ -53,6 +53,8 @@ add snippet addr 上海市静安区南京西路 42 号
 
 就这样——关键词是 `addr`，文字是后面整段，出现的那一行回车即保存。输入关键词或文字片段就能找到；回车复制，Ctrl+K 可以**粘贴到前台应用**或**删除**。输入 `snippets` 可以列出全部。
 
+**自动展开**（macOS 和 Windows）：在任何应用里直接输入关键词——`addr` 加一个空格——Fulcrum 会原地把它替换成完整文本，无需任何快捷键。可在 `settings` → `expansion-enabled` 开关；macOS 需要辅助功能权限。Linux 暂不支持（Wayland 不允许所需的输入监听）。
+
 片段跟随 [Sync beta](#sync-beta) 同步。
 
 ### 快捷链接（Quicklink）

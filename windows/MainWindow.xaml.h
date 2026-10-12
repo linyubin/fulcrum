@@ -103,6 +103,15 @@ struct MainWindow : MainWindowT<MainWindow> {
   // affordance on the status bar (errors must be copyable).
   void AttachStatusBarCopyAffordance();
   std::wstring last_status_;
+  // Snippet auto-expansion (WH_KEYBOARD_LL): types the snippet text when
+  // its keyword lands against a word boundary in any app.
+  void InstallExpansionHook();
+  void RefreshExpansionData();
+  void RepairExpansion(std::size_t trigger_index);
+  void OnExpansionKey(std::uint32_t vk);
+  HHOOK expansion_hook_{nullptr};
+  std::atomic<bool> expansion_ignore_{false};
+  void RepairExpansion(std::size_t trigger_index);
   // Updater 0.2 (in-app install stays macOS-only on this line): the silent
   // launch check is throttled backend-side, and progress polling follows the
   // backend's download thread, surfacing percent in the status bar. Once the
@@ -124,6 +133,12 @@ struct MainWindow : MainWindowT<MainWindow> {
   // search_rows_ remembers the live result list.
   bool actions_mode_{false};
   std::vector<rivet_app::ResultRow> search_rows_;
+  // Expansion state (all touched on the UI thread: the LL hook delivers
+  // on the thread that installed it).
+  bool expansion_enabled_{true};
+  std::vector<std::pair<std::wstring, std::wstring>> expansion_triggers_;
+  std::wstring expansion_buffer_;
+  bool expansion_ignore_{false};
 };
 
 }  // namespace winrt::RivetHost::implementation

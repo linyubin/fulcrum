@@ -4,49 +4,26 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
-## 0.9.0 — October 12, 2026
+## 0.10.0 — October 13, 2026
 
-The launch-parity wave plus the FPP2 core: closing the gaps a user
-touches daily, then the plugin protocol upgrade. The wire contract
-moved once; all three hosts ride together.
+Snippet auto-expansion on macOS and Windows — the last core Raycast
+base feature — plus the post-0.9.0 base-completeness wave.
 
-### Added
+### Added (snippet auto-expansion)
 
-- **Paste to frontmost**: clipboard rows now paste straight into the app
-  the user came from (Enter pastes; Copy stays in the ⌘K panel), snippets
-  and the AI last-answer get a "Paste to frontmost" action. Hosts write
-  the pasteboard, hide the panel, and synthesize the platform paste
-  keystroke — Accessibility on macOS, SendInput on Windows, XTEST on X11
-  and `wtype` on Wayland on Linux
-- **Streaming AI**: AI answers stream into the panel as they are
-  generated (new `AiStream` State, phases running → done|error) and land
-  on the clipboard when finished; running an AI row no longer blocks the
-  panel for the whole model call
-- **Snippet one-liner creation**: `add snippet <keyword> <text…>` saves a
-  snippet from the launcher, mirroring `add link`; query `snippets`
-  lists the store
-- **Host-rendered hotkey and theme**: the launcher hotkey and UI theme
-  settings now reach all three hosts — hosts pull them on startup, follow
-  live `$state` pushes (the Carbon/Win32/X11 grab re-binds, the panel
-  switches appearance), the settings row cycles through four presets,
-  and a taken combo falls back with a status note instead of stranding
-  the launcher
-- **Linux clipboard capture**: the GTK host records clipboard changes
-  (1 s poll), so clipboard history finally exists on Linux
-- **User guide**: `docs/user-guide.md` (+ `user-guide.zh-CN.md`),
-  written for people who have never used a launcher
-- **Design drafts for the next wave**: `docs/fpp2.md` (plugin protocol
-  v2 — daemon mode, detail view, result actions, preferences, the
-  staged permissions ladder) and `docs/registry.md` (the GitHub-only
-  curated plugin registry: signed index on Releases, PR-based
-  submission, embedded gallery as the offline baseline)
+- Type a snippet keyword in any app, a word boundary fires, and the
+  keyword is replaced with the full snippet text in place. macOS uses a
+  CGEventTap with unicode key injection; Windows uses a low-level
+  keyboard hook with SendInput repair. Toggle in `settings` →
+  `expansion-enabled` (macOS requires the accessibility permission).
+  Linux is not supported — Wayland does not allow the required input
+  monitoring, documented in the user guide.
 
 ### Added (system commands)
 
 - **Toggle Dark Mode** on macOS (System Events appearance), Windows
-  (theme registry), and GNOME (color-scheme); **Sleep Display** on macOS
-  (already shipped, now listed alongside); **Log Out** and **Empty
-  Recycle Bin** on Windows; **Empty Trash** on GNOME.
+  (theme registry), and GNOME (color-scheme); **Log Out** and **Empty
+  Recycle Bin** on Windows; **Empty Trash** on macOS and GNOME.
 
 ### Fixed (file search was dead on large result sets)
 
@@ -94,6 +71,19 @@ moved once; all three hosts ride together.
   row's title into the query field (the Raycast convention for refining a
   fuzzy hit into exact text)
 
+### Fixed
+
+- AI chat memory and the last-answer row lived in Racket parameters,
+  which are per-thread — every RVT1 request runs on its own worker
+  thread, so both silently reset between requests in production while
+  the single-threaded tests stayed green. Both now live in module-level
+  boxes and actually persist for the backend session
+
+## 0.9.0 — October 12, 2026
+
+The launch-parity wave: closing the gaps a user touches daily, with the
+FPP2 core landing alongside.
+
 ### Added (FPP2 wave)
 
 - **Plugin protocol v2** ([docs/fpp2.md](docs/fpp2.md)): daemon-mode
@@ -112,11 +102,43 @@ moved once; all three hosts ride together.
 
 ### Fixed
 
-- AI chat memory and the last-answer row lived in Racket parameters,
-  which are per-thread — every RVT1 request runs on its own worker
-  thread, so both silently reset between requests in production while
-  the single-threaded tests stayed green. Both now live in module-level
-  boxes and actually persist for the backend session
+- Update-check results no longer hide the panel before they can be
+  read; the status line is copyable on all three platforms.
+
+The launch-parity wave plus the FPP2 core: closing the gaps a user
+touches daily, then the plugin protocol upgrade. The wire contract
+moved once; all three hosts ride together.
+
+### Added
+
+- **Paste to frontmost**: clipboard rows now paste straight into the app
+  the user came from (Enter pastes; Copy stays in the ⌘K panel), snippets
+  and the AI last-answer get a "Paste to frontmost" action. Hosts write
+  the pasteboard, hide the panel, and synthesize the platform paste
+  keystroke — Accessibility on macOS, SendInput on Windows, XTEST on X11
+  and `wtype` on Wayland on Linux
+- **Streaming AI**: AI answers stream into the panel as they are
+  generated (new `AiStream` State, phases running → done|error) and land
+  on the clipboard when finished; running an AI row no longer blocks the
+  panel for the whole model call
+- **Snippet one-liner creation**: `add snippet <keyword> <text…>` saves a
+  snippet from the launcher, mirroring `add link`; query `snippets`
+  lists the store
+- **Host-rendered hotkey and theme**: the launcher hotkey and UI theme
+  settings now reach all three hosts — hosts pull them on startup, follow
+  live `$state` pushes (the Carbon/Win32/X11 grab re-binds, the panel
+  switches appearance), the settings row cycles through four presets,
+  and a taken combo falls back with a status note instead of stranding
+  the launcher
+- **Linux clipboard capture**: the GTK host records clipboard changes
+  (1 s poll), so clipboard history finally exists on Linux
+- **User guide**: `docs/user-guide.md` (+ `user-guide.zh-CN.md`),
+  written for people who have never used a launcher
+- **Design drafts for the next wave**: `docs/fpp2.md` (plugin protocol
+  v2 — daemon mode, detail view, result actions, preferences, the
+  staged permissions ladder) and `docs/registry.md` (the GitHub-only
+  curated plugin registry: signed index on Releases, PR-based
+  submission, embedded gallery as the offline baseline)
 
 ## 0.8.0
 

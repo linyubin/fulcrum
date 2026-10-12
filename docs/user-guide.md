@@ -80,6 +80,13 @@ the row that appears saves it on Enter. Type the keyword or any part of
 the text to find it again; Enter copies it, Ctrl+K offers **Paste to
 frontmost** and **Delete**. Query `snippets` to list them all.
 
+**Auto-expansion** (macOS and Windows): type the keyword anywhere —
+`addr` followed by a space — and Fulcrum replaces it with the full text
+in place. No shortcuts needed. Toggle it in `settings` →
+`expansion-enabled`; it requires the accessibility permission on macOS.
+Linux is not supported yet (Wayland does not allow the required input
+monitoring).
+
 Snippets sync with the [Sync beta](#sync-beta).
 
 ### Quicklinks

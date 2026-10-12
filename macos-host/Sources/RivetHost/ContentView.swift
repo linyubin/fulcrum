@@ -419,6 +419,13 @@ struct FulcrumAPI {
 
     func health() async throws -> String { try await generated.health() }
     func getHotkey() async throws -> String { try await generated.get_hotkey() }
+    func snippets() async throws -> [(keyword: String, text: String)] {
+        let rows = try await generated.snippet_list()
+        return rows.compactMap { row in
+            guard row.count >= 4, !row[2].isEmpty, !row[3].isEmpty else { return nil }
+            return (keyword: row[2], text: row[3])
+        }
+    }
     func getTheme() async throws -> String { try await generated.get_theme() }
     func pluginDetail(rowId: String, arg: String) async throws -> RivetTypes.DetailView {
         try await generated.plugin_detail(row_id: rowId, arg: arg)

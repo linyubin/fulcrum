@@ -343,6 +343,7 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
         window->SearchAsync(L"");
         window->StartSilentUpdateCheck();
         window->PullHostSettings();
+        window->RefreshExpansionData();
       } else {
         // Never destroy the last Backend reference on its own reader thread.
         std::thread([backend = std::move(backend)]() mutable {
@@ -358,6 +359,36 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
       }
     });
   }
+}
+
+// ---- snippet auto-expansion (WH_KEYBOARD_LL) ------------------------------
+//
+// The hook observes keystrokes system-wide; when a snippet keyword lands
+// against a word boundary, the keyword is erased with backspaces and the
+// snippet text typed in its place via unicode key input. The repair runs
+// from a posted message (never inside the hook — LL hooks must return
+// fast, and SendInput inside a hook would re-enter it). Injections pass
+// through expansion_ignore_ so the hook never processes its own keys.
+
+constexpr UINT kExpansionRepairMessage = WM_APP + 4;
+
+ expansion_ignore_guard::~expansion_ignore_guard() = default;
+
+struct expansion_ignore_guard {
+  bool* flag;
+  explicit expansion_ignore_guard(bool* f) : flag(f) { *f = true; }
+  ~expansion_ignore_guard() { *f = false; }
+};
+
+MainWindow* g_expansion_window = nullptr;  // set once at install
+
+LRESULT CALLBACK expansion_hook_proc(int code, WPARAM wParam, LPARAM lParam) {
+  if (code >= 0 && wParam == WM_KEYDOWN && g_expansion_window != nullptr &&
+      !g_expansion_window->expansion_ignore_) {
+    auto const* info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+    g_expansion_window->OnExpansionKey(info->vkCode);
+  }
+  return ::CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
 void MainWindow::FinishNativeSetup() {
@@ -415,6 +446,9 @@ void MainWindow::FinishNativeSetup() {
                         self->HandleTrayMessage(msg, static_cast<std::int64_t>(lParam),
                                                 hWnd);
                       }
+                      if (msg == kExpansionRepairMessage && self != nullptr) {
+                        self->RepairExpansion(static_cast<std::size_t>(wParam));
+                      }
                       return DefSubclassProc(hWnd, msg, wParam, lParam);
                     },
                     1,
@@ -436,6 +470,7 @@ void MainWindow::FinishNativeSetup() {
       hwnd, kTrayIconId, kTrayCallbackMessage, L"Fulcrum", tray_hicon);
 
   AttachStatusBarCopyAffordance();
+  InstallExpansionHook();
 
   // WinUI Window has no Deactivated event; the Activated state carries it.
   this->Activated([this](auto&&,
@@ -986,6 +1021,139 @@ void MainWindow::RunSelected() {
         }
       });
     }
+  }).detach();
+}
+
+// ---- snippet auto-expansion ----------------------------------------------
+
+void MainWindow::OnExpansionKey(std::uint32_t vk) {
+  // The user typing into Fulcrum's own panel must never self-expand.
+  if (::GetForegroundWindow() == ::FindWindowW(nullptr, L"Fulcrum")) {
+    expansion_buffer_.clear();
+    return;
+  }
+  if (vk == VK_BACK) {
+    if (!expansion_buffer_.empty()) expansion_buffer_.pop_back();
+    return;
+  }
+  wchar_t ch = 0;
+  if (vk == VK_SPACE) {
+    ch = L' ';
+  } else if ((vk >= 0x21 && vk <= 0x7E) || (vk >= 0xBA && vk <= 0xC0) ||
+             (vk >= 0xDB && vk <= 0xDF)) {
+    ch = static_cast<wchar_t>(::MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR) & 0xFFFF);
+  }
+  if (ch == 0) {
+    expansion_buffer_.clear();
+    return;
+  }
+  bool const boundary =
+      ch == L' ' || ch == L'.' || ch == L',' || ch == L';' || ch == L':' ||
+      ch == L'!' || ch == L'?';
+  if (!boundary) {
+    expansion_buffer_ += ch;
+    return;
+  }
+  std::wstring const candidate = expansion_buffer_;
+  expansion_buffer_.clear();
+  if (candidate.empty() || !expansion_enabled_) {
+    return;
+  }
+  for (std::size_t i = 0; i < expansion_triggers_.size(); ++i) {
+    if (expansion_triggers_[i].first == candidate) {
+      expansion_ignore_.store(true, std::memory_order_relaxed);
+      HWND const hwnd = ::FindWindowW(nullptr, L"Fulcrum");
+      if (hwnd != nullptr) {
+        ::PostMessageW(hwnd, kExpansionRepairMessage,
+                       static_cast<WPARAM>(i), 0);
+      }
+      break;
+    }
+  }
+}
+
+void MainWindow::RepairExpansion(std::size_t trigger_index) {
+  if (trigger_index >= expansion_triggers_.size()) {
+    return;
+  }
+  std::wstring const text = expansion_triggers_[trigger_index].second;
+  expansion_ignore_.store(true, std::memory_order_relaxed);
+  std::vector<INPUT> inputs;
+  // Erase the keyword (the boundary character already landed after it).
+  for (std::size_t i = 0; i < expansion_buffer_.size(); ++i) {
+    INPUT down{};
+    down.type = INPUT_KEYBOARD;
+    down.ki.wVk = VK_BACK;
+    inputs.push_back(down);
+    INPUT up{};
+    up.type = INPUT_KEYBOARD;
+    up.ki.wVk = VK_BACK;
+    up.ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs.push_back(up);
+  }
+  // Type the expansion as unicode key input (no clipboard churn).
+  for (wchar_t const unit : text) {
+    INPUT down{};
+    down.type = INPUT_KEYBOARD;
+    down.ki.wVk = 0;
+    down.ki.dwFlags = KEYEVENTF_UNICODE;
+    down.ki.wScan = static_cast<WORD>(unit);
+    inputs.push_back(down);
+    INPUT up{};
+    up.type = INPUT_KEYBOARD;
+    up.ki.wVk = 0;
+    up.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+    up.ki.wScan = static_cast<WORD>(unit);
+    inputs.push_back(up);
+  }
+  if (!inputs.empty()) {
+    ::SendInput(static_cast<UINT>(inputs.size()), inputs.data(),
+                sizeof(INPUT));
+  }
+  expansion_ignore_.store(false, std::memory_order_relaxed);
+}
+
+void MainWindow::InstallExpansionHook() {
+  g_expansion_window = this;
+  expansion_hook_ = ::SetWindowsHookExW(
+      WH_KEYBOARD_LL, expansion_hook_proc, ::GetModuleHandleW(nullptr), 0);
+}
+
+void MainWindow::RefreshExpansionData() {
+  if (api_ == nullptr) {
+    return;
+  }
+  auto const dispatcher = DispatcherQueue();
+  auto const weak = get_weak();
+  auto* api = api_.get();
+  std::thread([weak, api, dispatcher]() mutable {
+    bool enabled = true;
+    std::vector<std::pair<std::wstring, std::wstring>> triggers;
+    try {
+      auto const rows = api->settings_list().get();
+      for (auto const& row : rows) {
+        if (row.size() >= 3 && row[0] == "expansion-enabled") {
+          enabled = row[1] != "off";
+        }
+      }
+      if (enabled) {
+        auto const snippets = api->snippet_list().get();
+        for (auto const& cells : snippets) {
+          if (cells.size() >= 4 && !cells[2].empty() && !cells[3].empty()) {
+            triggers.emplace_back(to_wide(cells[2]), to_wide(cells[3]));
+          }
+        }
+      }
+    } catch (...) {
+      return;  // silent: a failed refresh keeps the previous table
+    }
+    dispatcher.TryEnqueue(
+        [weak, enabled, triggers = std::move(triggers)]() mutable {
+          if (auto window = weak.get()) {
+            window->expansion_enabled_ = enabled;
+            window->expansion_triggers_ = std::move(triggers);
+          }
+        });
   }).detach();
 }
 

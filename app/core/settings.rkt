@@ -97,6 +97,9 @@
    'ai-model
    (list string? ""
          "AI model; empty uses the provider default (gpt-4o-mini / claude-3-5-haiku / llama3.2)")
+   'expansion-enabled
+   (list boolean? #t
+         "Snippet auto-expansion: typing a snippet keyword in any app replaces it with the snippet text (macOS and Windows; requires the accessibility permission on macOS)")
    'ai-persona
    (list string? ""
          "AI persona: persistent customization prepended as a system message to every request")

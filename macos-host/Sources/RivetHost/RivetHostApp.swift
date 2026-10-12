@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let spec = try? await api.getHotkey() {
                     self?.applyHotkey(spec)
                 }
+                self?.refreshExpansionEngine()
                 if let theme = try? await api.getTheme() {
                     Self.applyTheme(theme)
                 }
@@ -207,7 +208,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func hidePanel() {
         panel?.orderOut(nil)
+        // Snippets may have changed while the panel was open; the
+        // expansion engine picks up the new trigger table now.
+        refreshExpansionEngine()
     }
+
+    /// Fetches snippets + the expansion setting and refreshes the engine.
+    func refreshExpansionEngine() {
+        guard let model else { return }
+        Task { [weak self] in
+            guard let api = model.api else { return }
+            let snippets = (try? await api.snippets()) ?? []
+            var enabled = true
+            if let rows = try? await api.settingsList(),
+               let row = rows.first(where: { $0.id == "expansion-enabled" }) {
+                enabled = row.badge != "off"
+            }
+            self?.expansionEngine.refresh(enabled: enabled,
+                                          snippets: snippets)
+        }
+    }
+
+    var panelIsKey: Bool { NSApp.keyWindow === panel }
+    let expansionEngine = ExpansionEngine.shared
 
     // MARK: global hotkey
 
