@@ -372,19 +372,11 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
 
 constexpr UINT kExpansionRepairMessage = WM_APP + 4;
 
- expansion_ignore_guard::~expansion_ignore_guard() = default;
-
-struct expansion_ignore_guard {
-  bool* flag;
-  explicit expansion_ignore_guard(bool* f) : flag(f) { *f = true; }
-  ~expansion_ignore_guard() { *f = false; }
-};
-
 MainWindow* g_expansion_window = nullptr;  // set once at install
 
 LRESULT CALLBACK expansion_hook_proc(int code, WPARAM wParam, LPARAM lParam) {
   if (code >= 0 && wParam == WM_KEYDOWN && g_expansion_window != nullptr &&
-      !g_expansion_window->expansion_ignore_) {
+      !g_expansion_window->expansion_ignore_.load(std::memory_order_relaxed)) {
     auto const* info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
     g_expansion_window->OnExpansionKey(info->vkCode);
   }

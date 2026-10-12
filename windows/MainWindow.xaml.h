@@ -111,7 +111,6 @@ struct MainWindow : MainWindowT<MainWindow> {
   void OnExpansionKey(std::uint32_t vk);
   HHOOK expansion_hook_{nullptr};
   std::atomic<bool> expansion_ignore_{false};
-  void RepairExpansion(std::size_t trigger_index);
   // Updater 0.2 (in-app install stays macOS-only on this line): the silent
   // launch check is throttled backend-side, and progress polling follows the
   // backend's download thread, surfacing percent in the status bar. Once the
@@ -138,7 +137,6 @@ struct MainWindow : MainWindowT<MainWindow> {
   bool expansion_enabled_{true};
   std::vector<std::pair<std::wstring, std::wstring>> expansion_triggers_;
   std::wstring expansion_buffer_;
-  bool expansion_ignore_{false};
 };
 
 }  // namespace winrt::RivetHost::implementation
