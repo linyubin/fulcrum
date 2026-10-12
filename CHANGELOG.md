@@ -4,10 +4,11 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
-## Unreleased
+## 0.9.0 — October 12, 2026
 
-The launch-parity wave: closing the gaps a user touches daily. The wire
-contract moves once, so 0.9.0 will be a cross-platform release.
+The launch-parity wave plus the FPP2 core: closing the gaps a user
+touches daily, then the plugin protocol upgrade. The wire contract
+moved once; all three hosts ride together.
 
 ### Added
 
