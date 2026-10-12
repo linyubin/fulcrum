@@ -41,6 +41,15 @@ moved once; all three hosts ride together.
   curated plugin registry: signed index on Releases, PR-based
   submission, embedded gallery as the offline baseline)
 
+### Added (Linux Wayland hotkey)
+
+- The Linux host registers its summon shortcut through the
+  `org.freedesktop.portal.GlobalShortcuts` portal where available
+  (Wayland compositors and modern desktops): the compositor asks for
+  consent once and owns the final binding. Sessions without the portal
+  keep the X11 grab; older Wayland sessions still bind
+  `fulcrum --toggle` in compositor settings.
+
 ### Added (Raycast 2.0 parity: the AI memory trio)
 
 - **Persistent AI memory**: the conversation transcript and last answer

@@ -76,6 +76,11 @@ struct HotkeyGrab {
 
 HotkeyGrab hotkey_grab;
 
+// Portal-side global shortcuts (rivet GlobalShortcuts adapter). Held for
+// the process lifetime: the object owns the portal session and its async
+// bind must not be destroyed mid-flight.
+std::unique_ptr<rivet::system::GlobalShortcuts> g_portal_shortcuts;
+
 // The launcher hotkey as (X11 modifier mask, keysym). The grammar is one
 // spec shared with the backend (settings.rkt) and the other hosts:
 // modifiers alt/ctrl/shift/cmd/win/super, then space | a-z | 0-9 |
@@ -1427,6 +1432,45 @@ void on_activate(GtkApplication* app, gpointer) {
                     reinterpret_cast<unsigned char*>(&above), 1);
     XChangeProperty(dpy, xid, wm_state, XA_ATOM, 32, PropModeAppend,
                     reinterpret_cast<unsigned char*>(&skip_taskbar), 1);
+  }
+  // Hotkey, portal-first: where org.freedesktop.portal.GlobalShortcuts is
+  // available (Wayland compositors and modern X11 desktops), the summon
+  // shortcut is registered through the portal — the compositor asks for
+  // consent once and owns the final binding. Sessions without the portal
+  // fall back to the X11 grab (X11 only, by platform rules).
+  if (rivet::system::GlobalShortcuts::available()) {
+    // The object must outlive the async bind; it owns the portal session.
+    g_portal_shortcuts = std::make_unique<rivet::system::GlobalShortcuts>();
+    g_portal_shortcuts->set_activation_handler(
+        [](std::string const&, std::uint64_t, std::string const&) {
+          Launcher::instance().toggle();
+        });
+    g_portal_shortcuts->bind(
+        {rivet::system::GlobalShortcutSpec{
+            "summon", "Summon Fulcrum", "ALT+space"}},
+        std::string(),
+        [](rivet::system::GlobalShortcutBindResult const& result) {
+          switch (result.status) {
+            case rivet::system::GlobalShortcutBindStatus::cancelled:
+              Launcher::post_status(
+                  "Hotkey binding dismissed — bind `fulcrum --toggle` in "
+                  "compositor settings instead.");
+              break;
+            case rivet::system::GlobalShortcutBindStatus::failed:
+              Launcher::post_status("Portal hotkey failed: " +
+                                    result.message);
+              break;
+            default:
+              break;
+          }
+        });
+    launcher.start_backend();
+    return;
+  }
+  std::string hotkey_note =
+      install_x11_hotkey(gtk_widget_get_display(window), launcher.window);
+  if (!hotkey_note.empty()) {
+    launcher.set_status(hotkey_note);
   }
   std::string hotkey_note =
       install_x11_hotkey(gtk_widget_get_display(window), launcher.window);

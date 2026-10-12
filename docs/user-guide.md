@@ -241,11 +241,14 @@ itself on first launch. Clipboard history and AI keys deliberately do
 - **Paste-to-frontmost on Linux.** Works out of the box on X11. On
   Wayland, install `wtype` (compositors do not allow apps to inject
   input directly — that is a feature, and Fulcrum respects it).
-- **Linux (Wayland): the hotkey does nothing and there is no tray.**
-  Wayland compositors forbid global key grabs — this is a security
-  property of the platform, not a Fulcrum bug (check with
-  `echo $XDG_SESSION_TYPE`). The supported way: bind your own
-  compositor shortcut to the `fulcrum --toggle` command (GNOME:
+- **Linux (Wayland): the hotkey.** Wayland compositors forbid
+  application-side global key grabs, so Fulcrum registers its shortcut
+  through the desktop portal instead: on the first launch a compositor
+  dialog asks you to confirm "Summon Fulcrum" (ALT+Space by default —
+  the compositor may offer a different key; what it says is final).
+  Requires a portal-capable desktop (GNOME 48+, KDE Plasma 6+); check
+  your session with `echo $XDG_SESSION_TYPE`. On older Wayland
+  compositors, bind your own shortcut to `fulcrum --toggle` (GNOME:
   Settings → Keyboard → Custom Shortcuts; KDE: System Settings →
   Shortcuts). For background residency after login, add an autostart
   entry: `~/.config/autostart/fulcrum.desktop` with
