@@ -4,6 +4,45 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
+## Unreleased
+
+The launch-parity wave: closing the gaps a user touches daily. The wire
+contract moves once, so 0.9.0 will be a cross-platform release.
+
+### Added
+
+- **Paste to frontmost**: clipboard rows now paste straight into the app
+  the user came from (Enter pastes; Copy stays in the ⌘K panel), snippets
+  and the AI last-answer get a "Paste to frontmost" action. Hosts write
+  the pasteboard, hide the panel, and synthesize the platform paste
+  keystroke — Accessibility on macOS, SendInput on Windows, XTEST on X11
+  and `wtype` on Wayland on Linux
+- **Streaming AI**: AI answers stream into the panel as they are
+  generated (new `AiStream` State, phases running → done|error) and land
+  on the clipboard when finished; running an AI row no longer blocks the
+  panel for the whole model call
+- **Snippet one-liner creation**: `add snippet <keyword> <text…>` saves a
+  snippet from the launcher, mirroring `add link`; query `snippets`
+  lists the store
+- **Host-rendered hotkey and theme**: the launcher hotkey and UI theme
+  settings now reach all three hosts — hosts pull them on startup, follow
+  live `$state` pushes (the Carbon/Win32/X11 grab re-binds, the panel
+  switches appearance), the settings row cycles through four presets,
+  and a taken combo falls back with a status note instead of stranding
+  the launcher
+- **Linux clipboard capture**: the GTK host records clipboard changes
+  (1 s poll), so clipboard history finally exists on Linux
+- **User guide**: `docs/user-guide.md` (+ `user-guide.zh-CN.md`),
+  written for people who have never used a launcher
+
+### Fixed
+
+- AI chat memory and the last-answer row lived in Racket parameters,
+  which are per-thread — every RVT1 request runs on its own worker
+  thread, so both silently reset between requests in production while
+  the single-threaded tests stayed green. Both now live in module-level
+  boxes and actually persist for the backend session
+
 ## 0.8.0
 
 Packaging parity release: the release asset set now matches the family
