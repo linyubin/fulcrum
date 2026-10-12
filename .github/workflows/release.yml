@@ -24,15 +24,6 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # Exact rivet commit releases build against (family pin discipline, the
-  # same commit taskly v1.4.0 ships). Carries the update-fetch redirect fix
-  # (#153), the Ed25519 bytes key parser (2e1924c) the embedded updater
-  # uses, and the RivetTypes codegen namespace the macOS host compiles
-  # against. Bump this deliberately: the pin, not main, is what release
-  # artifacts build on.
-  RIVET_PIN: 410fc7c6987cda5fcf4e4f795d1d4f7a90d4e0f6
-
 jobs:
   validate:
     name: Validate release tag
@@ -79,12 +70,6 @@ jobs:
             racket-arch: arm64
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout Rivet
-        uses: actions/checkout@v4
-        with:
-          repository: turinglambdaai/rivet
-          path: rivet
-          ref: ${{ env.RIVET_PIN }}
       - name: Set up Racket CS 9.3
         if: matrix.platform == 'linux'
         uses: Bogdanp/setup-racket@v1.15
@@ -111,55 +96,14 @@ jobs:
             build-essential cmake pkg-config \
             libgtk-4-dev libglib2.0-dev zlib1g-dev liblz4-dev libncurses-dev \
             rpm desktop-file-utils
-      - name: Cache embeddable Racket CS (Linux)
+      - name: Set up embeddable Racket CS (Linux)
         if: matrix.platform == 'linux'
-        id: cache-racket-embed
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ runner.temp }}/racket-embed
-          key: racket-embed-9.3-${{ runner.os }}-${{ runner.arch }}-v1
-      - name: Build embeddable Racket CS (Linux)
-        if: matrix.platform == 'linux' && steps.cache-racket-embed.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/racket-minimal-9.3-src-builtpkgs.tgz"
-          source_root="$RUNNER_TEMP/racket-9.3"
-          build_root="$RUNNER_TEMP/racket-embed-build"
-          embed_prefix="$RUNNER_TEMP/racket-embed"
-
-          curl --fail --location --retry 3 \
-            --output "$archive" \
-            https://download.racket-lang.org/releases/9.3/installers/racket-minimal-9.3-src-builtpkgs.tgz
-          echo "3a01324d559a15e3f1f58b0c57a92bb344dce534e72e564e0d8b75e3b9c65295  $archive" |
-            sha256sum --check
-          tar -xzf "$archive" -C "$RUNNER_TEMP"
-          mkdir -p "$build_root"
-          cd "$build_root"
-          "$source_root/src/configure" --prefix="$embed_prefix"
-          make -j2
-          make install
-      - name: Save embeddable Racket CS cache (Linux)
-        if: matrix.platform == 'linux' && steps.cache-racket-embed.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ runner.temp }}/racket-embed
-          key: racket-embed-9.3-${{ runner.os }}-${{ runner.arch }}-v1
-      - name: Point Rivet at the embeddable runtime (Linux)
-        if: matrix.platform == 'linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          boot_dir="$(dirname "$(find "$RUNNER_TEMP/racket-embed" -name petite.boot -print -quit)")"
-          test -n "$boot_dir" || { echo "petite.boot missing from the embed build" >&2; exit 1; }
-          racket_include="$(racket -e '(require setup/dirs) (display (path->string (find-include-dir)))')"
-          racket_library="$(find "$RUNNER_TEMP/racket-embed" -maxdepth 6 -name 'libracketcs*.a' -print -quit)"
-          test -n "$racket_library" || { echo "libracketcs.a missing from the embed build" >&2; exit 1; }
-          echo "RIVET_RACKET_BOOT_DIR=$boot_dir" >> "$GITHUB_ENV"
-          echo "RIVET_RACKET_INCLUDE=$racket_include" >> "$GITHUB_ENV"
-          echo "RIVET_RACKET_LIBRARY=$racket_library" >> "$GITHUB_ENV"
-      - name: Link Rivet
-        run: raco pkg install --auto --no-docs --link "$GITHUB_WORKSPACE/rivet"
+        uses: turinglambdaai/rivet/.github/actions/setup-embed-racket@main
+      # Installed after the embeddable runtime so the catalog dependency
+      # closure (cext-lib, crypto-lib, keel) resolves against the minimal
+      # build — it ships no packages of its own.
+      - name: Install Rivet (catalog)
+        run: raco pkg install --auto --no-docs rivet
         shell: bash
       - name: Install WiX (v5; v7 requires EULA acceptance, v5 runs the v4 schema)
         if: matrix.platform == 'windows'
@@ -251,19 +195,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout Rivet
-        uses: actions/checkout@v4
-        with:
-          repository: turinglambdaai/rivet
-          path: rivet
-          ref: ${{ env.RIVET_PIN }}
       - name: Install Racket
         uses: Bogdanp/setup-racket@v1.15
         with:
           version: stable
           distribution: full
-      - name: Link Rivet
-        run: raco pkg install --auto --no-docs --link "$GITHUB_WORKSPACE/rivet"
+      - name: Install Rivet (catalog)
+        run: raco pkg install --auto --no-docs rivet
         shell: bash
       - uses: actions/download-artifact@v4
         with:
