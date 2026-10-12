@@ -54,7 +54,7 @@ fulcrum/
 ├── linux/                  # GTK4 面板 + X11 grab（Rivet 0.3 Linux preview）
 ├── gallery/                # 11 个第一方 FPP1 插件（应用内可安装）
 ├── tests/                  # 后端测试（raco test tests/）
-├── docs/                   # user-guide.md、plugins.md、release-runbook.md
+├── docs/                   # user-guide.md、plugins.md、fpp2.md、registry.md
 ├── site/                   # fulcrum.jrtx.site（GitHub Pages）
 └── .github/workflows/      # CI 矩阵 + tag 驱动的发布流水线
 ```

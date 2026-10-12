@@ -34,6 +34,11 @@ contract moves once, so 0.9.0 will be a cross-platform release.
   (1 s poll), so clipboard history finally exists on Linux
 - **User guide**: `docs/user-guide.md` (+ `user-guide.zh-CN.md`),
   written for people who have never used a launcher
+- **Design drafts for the next wave**: `docs/fpp2.md` (plugin protocol
+  v2 — daemon mode, detail view, result actions, preferences, the
+  staged permissions ladder) and `docs/registry.md` (the GitHub-only
+  curated plugin registry: signed index on Releases, PR-based
+  submission, embedded gallery as the offline baseline)
 
 ### Fixed
 

@@ -10,9 +10,14 @@ plugin: Python, Go, Rust, Node, a shell script. See
 [`gallery/epoch`](../gallery/epoch) for a complete,
 tested reference plugin.
 
+> FPP1 is frozen and permanently supported. The daemon mode, detail view,
+> actions, and preferences that come next are designed in
+> [`docs/fpp2.md`](fpp2.md) (draft), and the public plugin registry is
+> designed in [`docs/registry.md`](registry.md).
+
 ## The first-party gallery
 
-Fulcrum ships ten first-party plugins built into the app — query
+Fulcrum ships eleven first-party plugins built into the app — query
 `gallery` or `plugins` in the launcher to list them; select a row to
 install, select an installed row to uninstall. Fuzzy queries also suggest
 installs (type `docker` and the install row appears next to your apps).

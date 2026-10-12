@@ -54,7 +54,7 @@ fulcrum/
 ├── linux/                  # GTK4 panel + X11 grab (Rivet 0.3 Linux preview)
 ├── gallery/                # 11 first-party FPP1 plugins (installable in-app)
 ├── tests/                  # backend tests (raco test tests/)
-├── docs/                   # user-guide.md, plugins.md, release-runbook.md
+├── docs/                   # user-guide.md, plugins.md, fpp2.md, registry.md
 ├── site/                   # fulcrum.jrtx.site (GitHub Pages)
 └── .github/workflows/      # CI matrix + tag-driven release pipeline
 ```
