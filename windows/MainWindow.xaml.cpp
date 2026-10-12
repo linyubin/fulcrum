@@ -289,6 +289,12 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
               }
             });
           }
+        } else if (*state_name == "search-revision") {
+          dispatcher.TryEnqueue([weak]() mutable {
+            if (auto window = weak.get()) {
+              window->RefreshForRevision();
+            }
+          });
         }
         return;
       }
@@ -516,6 +522,7 @@ void MainWindow::OnClipboardUpdate() {
 void MainWindow::ShowLauncher() {
   actions_mode_ = false;
   DismissAiPanel();
+  DismissDetailPanel();
   QueryBox().Text(L"");
   SearchAsync(std::wstring(L""));
   this->Activate();
@@ -638,6 +645,29 @@ void MainWindow::DismissAiPanel() {
   AiPanel().Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
 }
 
+void MainWindow::ApplyPluginDetail(rivet_app::DetailView const& view) {
+  DetailPanel().Visibility(winrt::Microsoft::UI::Xaml::Visibility::Visible);
+  DetailText().Text(to_wide(view.text));
+  auto items = winrt::single_threaded_observable_vector<winrt::hstring>();
+  for (auto const& pair : view.metadata) {
+    if (pair.size() >= 2) {
+      items.Append(to_wide(pair[0]) + L"  ·  " + to_wide(pair[1]));
+    }
+  }
+  DetailMetadata().ItemsSource(items);
+}
+
+void MainWindow::DismissDetailPanel() {
+  DetailPanel().Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
+}
+
+void MainWindow::RefreshForRevision() {
+  // Backend-side data changed (FPP2 daemon push): re-run the query the
+  // user is looking at, debounced; only the newest search may paint.
+  search_generation_ += 1;
+  SearchAsync(std::wstring(QueryBox().Text()));
+}
+
 void MainWindow::PullHostSettings() {
   if (api_ == nullptr) {
     return;
@@ -707,10 +737,17 @@ void MainWindow::QueryBox_KeyDown(
         args.Handled(true);
         break;
       }
-      // A finished AI answer dismisses before anything else.
+      // A finished AI answer or a plugin detail dismisses before
+      // anything else.
       if (AiPanel().Visibility() ==
           winrt::Microsoft::UI::Xaml::Visibility::Visible) {
         DismissAiPanel();
+        args.Handled(true);
+        break;
+      }
+      if (DetailPanel().Visibility() ==
+          winrt::Microsoft::UI::Xaml::Visibility::Visible) {
+        DismissDetailPanel();
         args.Handled(true);
         break;
       }
@@ -879,6 +916,31 @@ void MainWindow::RunSelected() {
             // AI run: the request continues on a backend thread; the
             // ai-stream State drives the streaming panel.
             window->SetStatusOk(L"AI is answering…");
+          } else if (status == "detail") {
+            // FPP2 plugin detail: fetch the payload and show it in the
+            // panel slot. The RPC runs off the UI thread; the result
+            // paints through the dispatcher.
+            window->DismissDetailPanel();
+            auto* api2 = window->api_.get();
+            auto const row_id = to_utf8(row.id);
+            auto const row_arg = to_utf8(row.arg);
+            std::thread([weak, dispatcher, api2, row_id, row_arg]() mutable {
+              try {
+                auto view = api2->plugin_detail(row_id, row_arg).get();
+                dispatcher.TryEnqueue([weak, view]() mutable {
+                  if (auto window = weak.get()) {
+                    window->ApplyPluginDetail(view);
+                  }
+                });
+              } catch (std::exception const& e) {
+                auto message = std::string(e.what());
+                dispatcher.TryEnqueue([weak, message = std::move(message)] {
+                  if (auto window = weak.get()) {
+                    window->SetStatusError(to_wide(message));
+                  }
+                });
+              }
+            }).detach();
           } else if (status == "downloading") {
             // The backend download thread owns the transfer; the host
             // mirrors its progress into the status bar.

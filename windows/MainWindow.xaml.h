@@ -79,6 +79,10 @@ struct MainWindow : MainWindowT<MainWindow> {
   void ApplyHotkey(std::string const& spec);
   void DismissAiPanel();
   void ApplyAiStream(rivet_app::AiStream const& stream);
+  // FPP2 plugin detail view + live-refresh support.
+  void DismissDetailPanel();
+  void ApplyPluginDetail(rivet_app::DetailView const& view);
+  void RefreshForRevision();
   // One-time read of the backend-owned settings the host renders (hotkey,
   // theme). The backend pushes changes afterwards via the reserved $state
   // events; this seeds the initial values.

@@ -341,6 +341,10 @@ struct Launcher {
   GtkWidget* ai_panel{nullptr};
   GtkLabel* ai_phase{nullptr};
   GtkLabel* ai_text{nullptr};
+  // FPP2 plugin detail panel (hidden until a detail row runs).
+  GtkWidget* detail_panel{nullptr};
+  GtkLabel* detail_text{nullptr};
+  GtkLabel* detail_meta{nullptr};
 
   std::unique_ptr<rivet::linux_runtime::Backend> backend;
   std::unique_ptr<rivet_app::API> api;
@@ -416,6 +420,39 @@ struct Launcher {
   }
 
   void dismiss_ai_panel() { gtk_widget_set_visible(ai_panel, FALSE); }
+
+  void apply_plugin_detail(rivet_app::DetailView const& view) {
+    gtk_widget_set_visible(detail_panel, TRUE);
+    gtk_label_set_text(detail_text, view.text.c_str());
+    std::string meta;
+    for (auto const& pair : view.metadata) {
+      if (pair.size() >= 2) {
+        if (!meta.empty()) meta += "\n";
+        meta += pair[0] + "  ·  " + pair[1];
+      }
+    }
+    gtk_label_set_text(detail_meta, meta.c_str());
+  }
+
+  void dismiss_detail_panel() {
+    gtk_widget_set_visible(detail_panel, FALSE);
+  }
+
+  // The backend bumped search-revision (FPP2 daemon push): refresh the
+  // rows for whatever query is on screen, debounced through the same
+  // 120 ms path as typing.
+  void refresh_for_revision() {
+    if (search_source != 0) {
+      g_source_remove(search_source);
+    }
+    search_source =
+        g_timeout_add(250, [](gpointer) -> int {
+          Launcher& l = Launcher::instance();
+          l.search_source = 0;
+          l.run_search(gtk_editable_get_text(GTK_EDITABLE(l.search)));
+          return G_SOURCE_REMOVE;
+        }, nullptr);
+  }
 
   // One-time read of the backend-owned settings the host renders (hotkey,
   // theme). The backend pushes changes afterwards via the reserved $state
@@ -640,6 +677,11 @@ struct Launcher {
           return G_SOURCE_REMOVE;
         }, new std::string(std::move(value_copy)));
       }
+    } else if (*state_name == "search-revision") {
+      g_idle_add([](gpointer) -> int {
+        Launcher::instance().refresh_for_revision();
+        return G_SOURCE_REMOVE;
+      }, nullptr);
     } else if (*state_name == "hotkey") {
       if (auto const* spec = std::get_if<std::string>(&(fields->at(1).data))) {
         std::string spec_copy = *spec;
@@ -844,6 +886,7 @@ struct Launcher {
                          boxed->status == "copied" ||
                          boxed->status == "opened" ||
                          boxed->status == "started" ||
+                         boxed->status == "detail" ||
                          boxed->status == "downloading" ||
                          boxed->status == "delegated";
       } catch (std::exception const& e) {
@@ -866,6 +909,28 @@ struct Launcher {
             // AI run: the request continues on a backend thread; the
             // ai-stream State drives the streaming panel.
             Launcher::instance().set_status("AI is answering…");
+            return G_SOURCE_REMOVE;
+          }
+          if (job->status == "detail") {
+            // FPP2 plugin detail: fetch the payload and show it in the
+            // panel slot. The RPC runs on a worker thread; the paint
+            // marshals back through g_idle_add.
+            Launcher::instance().dismiss_detail_panel();
+            std::string const row_id = job->action_id;
+            auto* api_raw = Launcher::instance().api.get();
+            std::thread([api_raw, row_id, arg = std::string(row.arg)]() mutable {
+              try {
+                auto view = api_raw->plugin_detail(row_id, arg).get();
+                g_idle_add([](gpointer user_data) -> int {
+                  std::unique_ptr<rivet_app::DetailView> view(
+                      static_cast<rivet_app::DetailView*>(user_data));
+                  Launcher::instance().apply_plugin_detail(*view);
+                  return G_SOURCE_REMOVE;
+                }, new rivet_app::DetailView(std::move(view)));
+              } catch (std::exception const& e) {
+                Launcher::post_status(std::string("Detail error: ") + e.what());
+              }
+            }).detach();
             return G_SOURCE_REMOVE;
           }
           if (job->status == "downloading") {
@@ -893,6 +958,7 @@ struct Launcher {
   void show() {
     actions_mode = false;
     dismiss_ai_panel();
+    dismiss_detail_panel();
     gtk_editable_set_text(GTK_EDITABLE(search), "");
     run_search("");
     gtk_widget_set_visible(GTK_WIDGET(window), TRUE);
@@ -1118,7 +1184,11 @@ gboolean on_key_pressed(GtkEventControllerKey*, guint keyval, guint,
         Launcher::instance().close_actions();
         return TRUE;
       }
-      // A finished AI answer dismisses before anything else.
+      // A plugin detail panel or a finished AI answer dismisses first.
+      if (gtk_widget_get_visible(Launcher::instance().detail_panel)) {
+        Launcher::instance().dismiss_detail_panel();
+        return TRUE;
+      }
       if (gtk_widget_get_visible(Launcher::instance().ai_panel)) {
         Launcher::instance().dismiss_ai_panel();
         return TRUE;
@@ -1228,6 +1298,44 @@ void on_activate(GtkApplication* app, gpointer) {
   launcher.ai_phase = GTK_LABEL(ai_phase);
   launcher.ai_text = GTK_LABEL(ai_text);
 
+  // FPP2 plugin detail panel: same slot, static payload (text + a
+  // metadata block).
+  auto* detail_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  gtk_widget_set_visible(detail_panel, FALSE);
+  gtk_widget_set_margin_start(detail_panel, 12);
+  gtk_widget_set_margin_end(detail_panel, 12);
+  gtk_widget_set_margin_top(detail_panel, 4);
+  auto* detail_header = gtk_label_new("Details");
+  gtk_label_set_xalign(GTK_LABEL(detail_header), 0.0);
+  gtk_widget_add_css_class(detail_header, "caption");
+  gtk_widget_add_css_class(detail_header, "dim-label");
+  auto* detail_scroll = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(detail_scroll),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_max_content_height(
+      GTK_SCROLLED_WINDOW(detail_scroll), 180);
+  gtk_scrolled_window_set_propagate_natural_height(
+      GTK_SCROLLED_WINDOW(detail_scroll), TRUE);
+  auto* detail_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+  auto* detail_text = gtk_label_new("");
+  gtk_label_set_wrap(GTK_LABEL(detail_text), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(detail_text), 0.0);
+  gtk_label_set_selectable(GTK_LABEL(detail_text), TRUE);
+  auto* detail_meta = gtk_label_new("");
+  gtk_label_set_wrap(GTK_LABEL(detail_meta), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(detail_meta), 0.0);
+  gtk_label_set_selectable(GTK_LABEL(detail_meta), TRUE);
+  gtk_widget_add_css_class(detail_meta, "dim-label");
+  gtk_box_append(GTK_BOX(detail_box), detail_text);
+  gtk_box_append(GTK_BOX(detail_box), detail_meta);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(detail_scroll),
+                                detail_box);
+  gtk_box_append(GTK_BOX(detail_panel), detail_header);
+  gtk_box_append(GTK_BOX(detail_panel), detail_scroll);
+  launcher.detail_panel = detail_panel;
+  launcher.detail_text = GTK_LABEL(detail_text);
+  launcher.detail_meta = GTK_LABEL(detail_meta);
+
   auto* scrolled = gtk_scrolled_window_new();
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -1248,6 +1356,7 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_box_append(GTK_BOX(root), search);
   gtk_box_append(GTK_BOX(root), status);
   gtk_box_append(GTK_BOX(root), ai_panel);
+  gtk_box_append(GTK_BOX(root), detail_panel);
   gtk_box_append(GTK_BOX(root), scrolled);
   gtk_box_append(GTK_BOX(root), hint);
   gtk_window_set_child(launcher.window, root);

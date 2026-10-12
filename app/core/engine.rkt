@@ -41,7 +41,8 @@
          engine-app-count
          engine-record-use!
          engine-row-actions
-         result->row)
+         result->row
+         link-save-separator)
 
 (struct result
   (id title subtitle kind arg icon hint badge keywords priority)
@@ -265,7 +266,12 @@
   (if manager
       (lambda (query)
         (for/list ([row (in-list (plugin-manager-query manager query))])
-          (result (string-append "plugin:" (list-ref row 4))
+          ;; FPP2 results may ask for the detail view: Enter on those rows
+          ;; routes to plugin-detail (the host then fetches the detail
+          ;; payload); everything else keeps FPP1 run semantics.
+          (result (if (list-ref row 5)
+                      (string-append "plugin-detail:" (list-ref row 4))
+                      (string-append "plugin:" (list-ref row 4)))
                   (list-ref row 0)
                   (list-ref row 1)
                   "Plugin"
@@ -565,6 +571,21 @@
        (list (action-row "copy" "Copy path" "Copy" arg))]
       [(string=? id "web.open")
        (list (action-row "copy" "Copy URL" "Copy" arg))]
+      ;; FPP2 plugin results: the manager remembers each result's declared
+      ;; actions (per-result wins over the command defaults) and whether
+      ;; the row offered a detail view.
+      [(or (string-prefix? id "plugin:") (string-prefix? id "plugin-detail:"))
+       (define command-id
+         (substring id (string-length (if (string-prefix? id "plugin-detail:")
+                                          "plugin-detail:"
+                                          "plugin:"))))
+       (for/list ([action (in-list (plugin-manager-row-actions
+                                    (engine-plugins engine) command-id arg))])
+         (action-row (string-append "plugin-action:" command-id ":"
+                                    (car action))
+                     (cdr action)
+                     "Run"
+                     arg))]
       [else '()]))
   (map result->row actions))
 
@@ -801,4 +822,30 @@
         (if (string=? status "ok")
             (cons "ok" '())
             (cons (format "plugin action failed: ~a" status) '()))))]
+    ;; FPP2: a declared result action routes through run-action; a detail
+    ;; row returns the "detail" status — the host then fetches the payload
+    ;; through the plugin-detail RPC. Existence is checked so a stale row
+    ;; refuses loudly instead of pretending.
+    [(string-prefix? id "plugin-action:")
+     (define rest (substring id (string-length "plugin-action:")))
+     (define cuts
+       (for/list ([i (in-range (string-length rest))]
+                  #:when (char=? (string-ref rest i) #\:))
+         i))
+     (if (< (length cuts) 2)
+         (finish (cons (format "malformed plugin action: ~a" id) '()))
+         (let* ([command-id (substring rest 0 (cadr cuts))]
+                [action-id (substring rest (add1 (cadr cuts)))])
+           (finish
+            (let ([status (plugin-manager-run-action! (engine-plugins engine)
+                                                      command-id arg action-id)])
+              (if (string=? status "ok")
+                  (cons "ok" '())
+                  (cons (format "plugin action failed: ~a" status) '()))))))]
+    [(string-prefix? id "plugin-detail:")
+     (define command-id (substring id (string-length "plugin-detail:")))
+     (finish
+      (if (plugin-manager-command-exists? (engine-plugins engine) command-id)
+          (cons "detail" '())
+          (cons (format "unknown plugin command: ~a" command-id) '())))]
     [else (cons (format "unknown action: ~a" id) '())]))

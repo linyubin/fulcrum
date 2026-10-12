@@ -22,6 +22,8 @@
          ai-keys-path
          recents-path
          plugins-dir
+         plugin-prefs-path
+         plugin-secrets-path
          sync-root-override)
 
 (define (env-override)
@@ -86,3 +88,11 @@
 
 (define (plugins-dir)
   (build-path (ensure-data-dir!) "plugins"))
+
+;; FPP2 plugin preference values. Secrets live in their own file with the
+;; same policy as ai-keys.json: local-only, never mirrored to sync.
+(define (plugin-prefs-path)
+  (build-path (data-dir) "plugin-prefs.json"))
+
+(define (plugin-secrets-path)
+  (build-path (data-dir) "plugin-secrets.json"))

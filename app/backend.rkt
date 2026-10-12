@@ -29,6 +29,7 @@
          "core/paths.rkt"
          "core/plugins.rkt"
          "core/quicklinks.rkt"
+         "core/store.rkt"
          (rename-in "core/settings.rkt" [settings-list core:settings-list])
          (rename-in "core/snippets.rkt" [snippet-list core:snippet-list])
          "update.rkt")
@@ -50,6 +51,10 @@
          plugins-disabled-ids
          plugin-detail-rows
          row-actions-for
+         plugin-detail-for
+         plugin-pref-current-value
+         plugin-pref-spec
+         plugin-set-rows
          run-action)
 
 ;; Staged and packaged apps carry the true version in rivet-app-info.rktd
@@ -120,10 +125,28 @@
    [text : String]
    [error : (Optional String)]))
 
+;; FPP2 plugin detail payload: plain text plus key-value pairs, rendered
+;; natively by every host (no WebView, no markdown in v2.0).
+(define-record DetailView
+  ([text : String]
+   [metadata : (List (List String))]))
+
 ;; The live answer itself: the streaming request runs on a backend thread
 ;; and pushes phase running → done|error through this State; hosts render
 ;; the text as it grows. phase: idle | running | done | error.
 (define-state ai-stream : AiStream (AiStream "idle" "" (void)))
+
+;; Bumped whenever backend-side data changed in a way that should refresh
+;; the on-screen rows without new user input — currently FPP2 daemon
+;; results-changed pushes. Hosts re-run the current query when it moves.
+(define-state search-revision : Int64 0)
+
+(define search-revision-box (box 0))
+
+(define (bump-search-revision!)
+  (set-box! search-revision-box (add1 (unbox search-revision-box)))
+  (with-handlers ([exn:fail? void])
+    (state-set! search-revision (unbox search-revision-box))))
 
 (define (nullable value)
   (if value value (void)))
@@ -513,6 +536,67 @@
      (cons "ok" (list (cons 'notify "AI conversation reset")))]
     [else (cons (format "unknown ai action: ~a" id) '())]))
 
+;; ---- FPP2 plugin preferences ----------------------------------------------
+;;
+;; The manifest declares the schema; the backend stores the values and
+;; injects them into every request (environment at spawn + the prefs
+;; payload). Secret values live in their own local-only file — same policy
+;; as ai-keys.json, never mirrored to sync.
+
+(define (read-plugin-json path)
+  (with-handlers ([exn:fail? (lambda (_) (hash))])
+    (define raw (read-json-file path (hash)))
+    (if (hash? raw) raw (hash))))
+
+(define (plugin-by-id plugin-id)
+  (findf (lambda (p) (string=? (plugin-id p) plugin-id))
+         (plugin-manager-plugins (engine-plugins (engine!)))))
+
+(define (plugin-pref-spec plugin-id pref-name)
+  (define p (plugin-by-id plugin-id))
+  (and p
+       (findf (lambda (spec)
+                (string=? (plugin-pref-name spec) pref-name))
+              (plugin-preferences p))))
+
+;; Current value for one preference: stored value, else the manifest
+;; default. Booleans coerce to real booleans for the payload.
+(define (plugin-pref-current-value plugin-id spec)
+  (define stored
+    (hash-ref (read-plugin-json (if (string=? (plugin-pref-type spec) "secret")
+                                    (plugin-secrets-path)
+                                    (plugin-prefs-path)))
+              (string->symbol plugin-id)
+              (hash)))
+  (define raw
+    (hash-ref stored
+              (string->symbol (plugin-pref-name spec))
+              (plugin-pref-default spec)))
+  (if (string=? (plugin-pref-type spec) "boolean")
+      (string=? raw "true")
+      raw))
+
+;; The manager's injection thunk: symbol name → jsexpr per plugin.
+(define (plugin-prefs-for plugin-id)
+  (with-handlers ([exn:fail? (lambda (_) (hash))])
+    (define p (plugin-by-id plugin-id))
+    (if (or (not p) (null? (plugin-preferences p)))
+        (hash)
+        (for/hash ([spec (in-list (plugin-preferences p))])
+          (values (string->symbol (plugin-pref-name spec))
+                  (plugin-pref-current-value plugin-id spec))))))
+
+(define (plugin-pref-store! plugin-id spec value)
+  (define path (if (string=? (plugin-pref-type spec) "secret")
+                   (plugin-secrets-path)
+                   (plugin-prefs-path)))
+  (define file (read-plugin-json path))
+  (define table (hash-ref file (string->symbol plugin-id) (hash)))
+  (write-json-atomic!
+   path
+   (hash-set file (string->symbol plugin-id)
+             (hash-set table (string->symbol (plugin-pref-name spec)) value))))
+
 ;; ---- plugin center actions ----------------------------------------------
 
 ;; Third-party plugins come from an arbitrary source folder; the
@@ -563,6 +647,68 @@
      (cons "ok" (list (cons 'notify
                             (format "~a ~a"
                                     (if disabled? "Enabled" "Disabled") arg))))]
+    [(plugin.pref.cycle)
+     ;; Boolean/select preferences cycle right from the plugin center row.
+     (define parts (string-split arg link-save-separator))
+     (cond
+       [(not (and (engine-plugins engine) (= (length parts) 2)))
+        (cons "invalid plugin.pref.cycle payload" '())]
+       [else
+        (define spec (plugin-pref-spec (list-ref parts 0) (list-ref parts 1)))
+        (cond
+          [(not spec) (cons (format "no such preference: ~a" (list-ref parts 1)) '())]
+          [else
+           (define current (plugin-pref-current-value (list-ref parts 0) spec))
+           (define next
+             (cond
+               [(string=? (plugin-pref-type spec) "boolean")
+                (if current "false" "true")]
+               [(string=? (plugin-pref-type spec) "select")
+                (define choices (plugin-pref-choices spec))
+                (define cur-str (if current (format "~a" current) ""))
+                (define pos (index-of choices cur-str))
+                (if pos
+                    (list-ref choices (modulo (add1 pos) (length choices)))
+                    (car choices))]
+               [else (plugin-pref-default spec)]))
+           (plugin-pref-store! (list-ref parts 0) spec
+                               (if (boolean? next) next (format "~a" next)))
+           (plugin-manager-prefs-changed! (engine-plugins engine)
+                                          (list-ref parts 0))
+           (cons "ok" (list (cons 'notify
+                                  (format "~a = ~a"
+                                          (plugin-pref-name spec)
+                                          (if (boolean? next)
+                                              (if next "true" "false")
+                                              next)))))])])]
+    [(plugin.set)
+     ;; `plugin set <id> <pref> <value…>` — the editing idiom for free-text
+     ;; and secret preferences (the query box is the only text entry).
+     (define parts (string-split arg link-save-separator))
+     (cond
+       [(not (and (engine-plugins engine) (= (length parts) 3)))
+        (cons "invalid plugin.set payload" '())]
+       [else
+        (define spec (plugin-pref-spec (list-ref parts 0) (list-ref parts 1)))
+        (define value (list-ref parts 2))
+        (cond
+          [(not spec)
+           (cons (format "no such preference: ~a" (list-ref parts 1)) '())]
+          [(not (validate-plugin-pref-value spec value))
+           (cons (format "invalid value for ~a (~a)"
+                         (list-ref parts 1)
+                         (plugin-pref-type spec))
+                 '())]
+          [else
+           (plugin-pref-store! (list-ref parts 0) spec value)
+           (plugin-manager-prefs-changed! (engine-plugins engine)
+                                          (list-ref parts 0))
+           (cons "ok" (list (cons 'notify
+                                  (format "~a = ~a"
+                                          (plugin-pref-name spec)
+                                          (if (string=? (plugin-pref-type spec) "secret")
+                                              "••••••"
+                                              value)))))])])]
     [(plugins.install)
      (if (non-empty-string? (string-trim arg))
          (plugins-install-from! (string->path (string-trim arg)))
@@ -600,6 +746,45 @@
 ;; plugin (or one catalog entry) expands what a marketplace page would
 ;; show — every command with a copyable usage example, the permission
 ;; declarations, and the category. Transparency is the trust story.
+;; `plugin set <id> <pref> <value…>` — the one-line preference editor for
+;; text and secret preferences (boolean/select cycle from their rows in
+;; the plugin detail view). The value is everything after the pref name,
+;; spaces included.
+(define plugin-set-prefix "plugin set ")
+
+(define (plugin-set-rows trimmed)
+  (define rest (string-trim (substring trimmed (string-length plugin-set-prefix))))
+  (define parts (string-split rest " "))
+  (if (< (length parts) 3)
+      (list (list "noop"
+                  "Set a plugin preference"
+                  "plugin set <plugin-id> <pref> <value…> · e.g. docker set host tcp://…"
+                  "Plugin" "" "plugin" "" ""))
+      (let* ([plugin-id (car parts)]
+             [pref-name (cadr parts)]
+             [value (string-trim
+                     (substring rest
+                                (+ 1 (string-length plugin-id)
+                                   1 (string-length pref-name))))])
+        (define spec (with-handlers ([exn:fail? (lambda (_) #f)])
+                       (plugin-pref-spec plugin-id pref-name)))
+        (cond
+          [(not spec)
+           (list (list "noop"
+                       (format "Unknown preference: ~a ~a" plugin-id pref-name)
+                       "query plugins <name> to see the preferences a plugin declares"
+                       "Plugin" "" "plugin" "" ""))]
+          [else
+           (list (list "plugin.set"
+                       (format "Set ~a · ~a" (plugin-pref-label spec) plugin-id)
+                       (format "↵ saves ~a"
+                               (if (string=? (plugin-pref-type spec) "secret")
+                                   "the secret (local only, never synced)"
+                                   (format "~a" value)))
+                       "Plugin"
+                       (string-append plugin-id "\u001F" pref-name "\u001F" value)
+                       "plugin" "" "Set"))]))))
+
 (define (plugin-detail-rows text)
   (define manager (engine-plugins (engine!)))
   (define installed
@@ -663,13 +848,53 @@
                   (list (list "noop"
                               (format "Permissions: ~a" (string-join perms ", "))
                               "declared by the plugin's manifest"
-                              "Plugin" "" "plugin" "" "")))])
-        (append detail command-rows permission-row))))
+                              "Plugin" "" "plugin" "" "")))]
+             [prefs-rows
+              ;; FPP2 preferences: boolean/select cycle in place; text and
+              ;; secret preferences copy their `plugin set` template.
+              (let ([p (and (= (length installed) 1) (car installed))])
+                (if (or (not p) (null? (plugin-preferences p)))
+                    '()
+                    (for/list ([spec (in-list (plugin-preferences p))])
+                      (define current
+                        (plugin-pref-current-value (plugin-id p) spec))
+                      (define shown
+                        (if (string=? (plugin-pref-type spec) "secret")
+                            (if (or (not current)
+                                    (string=? (format "~a" current) ""))
+                                "(unset)"
+                                "••••••")
+                            (format "~a" current)))
+                      (if (member (plugin-pref-type spec) '("boolean" "select"))
+                          (list "plugin.pref.cycle"
+                                (format "~a = ~a"
+                                        (plugin-pref-label spec) shown)
+                                "↵ cycles the value"
+                                "Plugin"
+                                (string-append (plugin-id p)
+                                               "\u001F"
+                                               (plugin-pref-name spec))
+                                "plugin" "" shown)
+                          (list "plugins.example"
+                                (format "~a = ~a"
+                                        (plugin-pref-label spec) shown)
+                                (format "↵ copies: plugin set ~a ~a <value…>"
+                                        (plugin-id p)
+                                        (plugin-pref-name spec))
+                                "Plugin"
+                                (format "plugin set ~a ~a "
+                                        (plugin-id p)
+                                        (plugin-pref-name spec))
+                                "plugin" "" "Copy")))))])
+        (append detail command-rows permission-row prefs-rows))))
 
 (define (plugin-center-rows query)
   (define trimmed (string-trim query))
   (define lowered (string-downcase trimmed))
   (cond
+    ;; `plugin set <id> <pref> <value…>` — the FPP2 preference editor.
+    [(string-prefix? lowered "plugin set ")
+     (plugin-set-rows trimmed)]
     [(string-prefix? lowered "install plugin ")
      (define path (string-trim (substring trimmed 15)))
      (if (non-empty-string? path)
@@ -763,6 +988,8 @@
     (cond
       [(string-prefix? id "settings.") (settings-act! arg)]
       [(string-prefix? id "ai.") (ai-act! (engine!) id arg)]
+      [(or (string=? id "plugin.set") (string=? id "plugin.pref.cycle"))
+       (plugins-act! (engine!) id arg)]
       [(string=? id "plugins.example")
        ;; Copying a usage example: the panel hides and the example sits
        ;; on the clipboard, ready to paste into a fresh query.
@@ -836,6 +1063,35 @@
 (define-rpc (snippet-delete [id String] : Bool)
   (define store (engine-snippets (engine!)))
   (if store (snippet-delete! store id) #f))
+
+;; Plain function under the plugin-detail RPC so tests drive the detail
+;; payload without a live wire. Returns the DetailView wire record.
+(define (plugin-detail-for row-id arg)
+  (define command-id
+    (if (string-prefix? row-id "plugin-detail:")
+        (substring row-id (string-length "plugin-detail:"))
+        row-id))
+  (define response
+    (with-handlers ([exn:fail? (lambda (e) (format "plugin error: ~a" (exn-message e)))])
+      (plugin-manager-detail! (engine-plugins (engine!)) command-id arg)))
+  (if (hash? response)
+      (DetailView
+       (let ([t (hash-ref response 'text #f)])
+         (if (string? t) (substring t 0 (min (string-length t) 16384)) ""))
+       (for/list ([pair (in-list
+                         (let ([md (hash-ref response 'metadata '())])
+                           (if (list? md) (take-min-12 md) '())))]
+                  #:when (and (list? pair) (>= (length pair) 2)
+                              (string? (list-ref pair 0))
+                              (string? (list-ref pair 1))))
+         (list (list-ref pair 0) (list-ref pair 1))))
+      (DetailView (format "plugin error: ~a" response) '())))
+
+(define (take-min-12 xs)
+  (if (> (length xs) 12) (take xs 12) xs))
+
+(define-rpc (plugin-detail [row-id String] [arg String] : DetailView)
+  (plugin-detail-for row-id arg))
 
 ;; ---- settings -----------------------------------------------------------
 
@@ -1112,7 +1368,9 @@
     (and (settings-get manager 'plugins-enabled)
          (make-plugin-manager (plugins-dir)
                               #:timeout-ms (settings-get manager 'plugins-timeout-ms)
-                              #:disabled-thunk plugins-disabled-ids)))
+                              #:disabled-thunk plugins-disabled-ids
+                              #:nudge-thunk bump-search-revision!
+                              #:prefs-thunk plugin-prefs-for)))
   (define engine
     (make-engine #:clipboard-store clip-store
                  #:snippet-store snip-store

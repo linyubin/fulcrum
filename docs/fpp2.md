@@ -1,9 +1,10 @@
 # Fulcrum Plugin Protocol v2 (FPP2) — Design Draft
 
-**Status: draft.** This document is the implementation target for the
-protocol wave (Fulcrum 0.9/1.0). It is a design, not a spec — the spec
-will replace this file's "wire protocol" section once the reference
-plugin and conformance tests land. FPP1
+**Status: core implemented.** The wire protocol, daemon lifecycle,
+result actions, detail view, and preferences land with this document
+(conformance kit: `tests/fpp2-test.rkt`). The registry client
+([docs/registry.md](registry.md)) and the proxy stage of the
+permissions ladder are the remaining pieces. FPP1
 ([docs/plugins.md](plugins.md)) is frozen and permanently supported;
 everything here is additive.
 

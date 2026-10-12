@@ -40,6 +40,22 @@ contract moves once, so 0.9.0 will be a cross-platform release.
   curated plugin registry: signed index on Releases, PR-based
   submission, embedded gallery as the offline baseline)
 
+### Added (FPP2 wave)
+
+- **Plugin protocol v2** ([docs/fpp2.md](docs/fpp2.md)): daemon-mode
+  plugins stay warm across queries (lazy spawn, per-op timeouts, crash
+  backoff, LRU cap, rate-limited results-changed push), results can
+  declare ⌘K actions and a detail view (native text + metadata panel on
+  every host), and manifests can declare preferences the backend stores
+  and injects — edited with `plugin set <id> <pref> <value…>` or cycled
+  from the plugin detail rows. FPP1 is unchanged and permanent.
+- **Live results**: a new `search-revision` State makes all three hosts
+  refresh the on-screen rows when a backend daemon pushes updates.
+- Conformance kit: `tests/fpp2-test.rkt` drives a real daemon fixture
+  through warm queries, interleaved ops, action routing, preference
+  injection, nudge rate-limiting, and the crash/backoff/cold-fallback
+  path.
+
 ### Fixed
 
 - AI chat memory and the last-answer row lived in Racket parameters,

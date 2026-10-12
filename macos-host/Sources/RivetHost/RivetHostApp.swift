@@ -295,6 +295,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               // In the ⌘K panel: back to the search rows.
               if self.model?.showingActions == true {
                   self.model?.closeActions()
+              } else if self.model?.detailView != nil {
+                  // A plugin detail panel dismisses before anything else.
+                  self.model?.dismissDetailView()
               } else if self.model?.aiStream != nil {
                   // A finished AI answer dismisses first; the launcher
                   // stays for the next query.

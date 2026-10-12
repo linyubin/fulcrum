@@ -257,6 +257,59 @@ struct AiStreamView: View {
     }
 }
 
+/// A FPP2 plugin detail payload: plain text plus key-value pairs, rendered
+/// natively (the plugin-detail RPC's wire shape).
+struct DetailViewState {
+    let text: String
+    let metadata: [(String, String)]
+}
+
+/// A FPP2 plugin detail panel: the same slot the AI stream uses, for a
+/// static payload. Text is selectable; metadata renders as a property list.
+struct PluginDetailView: View {
+    let state: DetailViewState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(FulcrumTheme.accent)
+                Text("Details")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !state.text.isEmpty {
+                        Text(state.text)
+                            .font(.system(size: 12.5))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    ForEach(state.metadata, id: \.0, content: { pair in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(pair.0)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Text(pair.1)
+                                .font(.system(size: 11.5))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    })
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 190)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
+}
+
 /// The launcher panel UI: one query field, one result list, one status line.
 /// All state lives in LauncherModel; this view is deliberately dumb.
 struct LauncherView: View {
@@ -286,6 +339,11 @@ struct LauncherView: View {
 
             if let ai = model.aiStream, ai.phase != "idle" {
                 AiStreamView(state: ai)
+                Divider().opacity(0.5)
+            }
+
+            if let detail = model.detailView {
+                PluginDetailView(state: detail)
                 Divider().opacity(0.5)
             }
 
@@ -357,6 +415,9 @@ struct FulcrumAPI {
     func health() async throws -> String { try await generated.health() }
     func getHotkey() async throws -> String { try await generated.get_hotkey() }
     func getTheme() async throws -> String { try await generated.get_theme() }
+    func pluginDetail(rowId: String, arg: String) async throws -> RivetTypes.DetailView {
+        try await generated.plugin_detail(row_id: rowId, arg: arg)
+    }
     func search(_ query: String) async throws -> [ResultRow] {
         (try await generated.search(query: query)).compactMap { ResultRow.from($0) }
     }
@@ -402,6 +463,9 @@ final class LauncherModel: ObservableObject {
     /// Live AI answer (nil = nothing to show); survives typing so the user
     /// can keep reading while the model finishes.
     @Published var aiStream: AiStreamState?
+    /// FPP2 plugin detail view (nil = nothing to show); dismissed by the
+    /// next keystroke or Esc.
+    @Published var detailView: DetailViewState?
     private var actionParent: ResultRow?
 
     var onToggle: (() -> Void)?
@@ -474,7 +538,36 @@ final class LauncherModel: ObservableObject {
         aiStream = nil
     }
 
+    /// Esc over a plugin detail panel: dismiss it only.
+    func dismissDetailView() {
+        detailView = nil
+    }
+
+    /// The backend bumped search-revision (FPP2 daemon push): refresh the
+    /// on-screen rows for the current query, debounced.
+    func refreshForRevision() {
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            guard let self, let api = self.api else { return }
+            let text = self.query
+            do {
+                let result = try await api.search(text)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    guard text == self.query else { return }
+                    self.rows = result
+                    self.selection = result.first?.rowId
+                }
+            } catch {
+                // A failed refresh is silent: the stale rows stay.
+            }
+        }
+    }
+
     func queryChanged(_ text: String) {
+        detailView = nil
         searchChanged(text)
     }
 
@@ -555,6 +648,25 @@ final class LauncherModel: ObservableObject {
                         // AI run: the request continues on a backend thread;
                         // the ai-stream State drives the streaming panel.
                         self.status = "AI is answering…"
+                    case "detail":
+                        // FPP2 plugin detail: fetch the payload and show it
+                        // in the panel slot; the row stays put behind it.
+                        self.status = ""
+                        Task { [weak self] in
+                            do {
+                                let view = try await api.pluginDetail(rowId: row.id,
+                                                                      arg: row.arg)
+                                await MainActor.run { [weak self] in
+                                    self?.detailView = DetailViewState(
+                                        text: view.text,
+                                        metadata: view.metadata.map { ($0[0], $0[1]) })
+                                }
+                            } catch {
+                                await MainActor.run { [weak self] in
+                                    self?.status = "Detail error: \(error)"
+                                }
+                            }
+                        }
                     case "quit-and-install":
                         UpdateController.shared?.quitAndInstall()
                     case "downloading":
@@ -633,6 +745,8 @@ final class LauncherModel: ObservableObject {
                     aiStream = AiStreamState(phase: phase, text: text,
                                              error: error)
                 }
+            case "search-revision":
+                refreshForRevision()
             default:
                 break
             }
