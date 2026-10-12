@@ -192,6 +192,21 @@
            (run-action "ai.paste" "")))
        (check-true (string-contains? paste-error "no Rivet server"))
 
+       ;; "ai model <name>" saves the model through the settings route;
+       ;; bare "ai model" offers the syntax with the current value.
+       (check-equal? (row-arg (car (ai-rows "ai model"))) "")
+       (define model-rows (ai-rows "ai model gpt-4o-mini-2025"))
+       (check-equal? (row-id (car model-rows)) "ai.model")
+       (check-equal? (row-arg (car model-rows)) "gpt-4o-mini-2025")
+       (define model-set
+         (with-handlers ([exn:fail? (lambda (_) 'emit-error)])
+           (run-action "ai.model" "gpt-4o-mini-2025")))
+       ;; The save reaches the settings store either way (the event emit
+       ;; needs a live server; the refusal paths return strings instead).
+       (check-equal? (settings-get manager 'ai-model) "gpt-4o-mini-2025")
+       (check-true (or (equal? model-set "ok")
+                       (equal? model-set 'emit-error)))
+
        ;; Chat reset clears memory.
        (ai-set-history! (ai-history-append '() "q" "a"))
        (with-handlers ([exn:fail? void])

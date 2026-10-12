@@ -41,6 +41,15 @@ moved once; all three hosts ride together.
   curated plugin registry: signed index on Releases, PR-based
   submission, embedded gallery as the offline baseline)
 
+### Added (polish wave)
+
+- **`ai model <name>`**: set the AI model from the launcher — model names
+  are free-form, so a settings cycle does not fit; bare `ai model` shows
+  the current value
+- **Tab completion** on all three hosts: Tab autocompletes the selected
+  row's title into the query field (the Raycast convention for refining a
+  fuzzy hit into exact text)
+
 ### Added (FPP2 wave)
 
 - **Plugin protocol v2** ([docs/fpp2.md](docs/fpp2.md)): daemon-mode

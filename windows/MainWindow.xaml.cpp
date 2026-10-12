@@ -720,6 +720,19 @@ void MainWindow::QueryBox_KeyDown(
     return;
   }
   switch (args.Key()) {
+    case winrt::Windows::System::VirtualKey::Tab:
+      // Autocomplete the selected row's title into the query field.
+      if (actions_mode_) {
+        break;
+      }
+      if (auto const index = ResultsList().SelectedIndex();
+          index >= 0 && index < static_cast<int>(rows_.size())) {
+        QueryBox().Text(to_wide(rows_[static_cast<std::size_t>(index)].title));
+        QueryBox().Focus(
+            winrt::Microsoft::UI::Xaml::FocusState::Programmatic);
+      }
+      args.Handled(true);
+      break;
     case winrt::Windows::System::VirtualKey::Down:
       MoveSelection(1);
       args.Handled(true);

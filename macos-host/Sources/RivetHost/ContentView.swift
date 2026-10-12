@@ -548,6 +548,17 @@ final class LauncherModel: ObservableObject {
         detailView = nil
     }
 
+    /// Tab: autocomplete the selected row's title into the query field —
+    /// the Raycast convention for refining a fuzzy hit into its exact
+    /// text before running it.
+    func completeFromSelection() {
+        guard !showingActions,
+              let row = rows.first(where: { $0.rowId == selection }),
+              !row.title.isEmpty else { return }
+        detailView = nil
+        query = row.title
+    }
+
     /// The backend bumped search-revision (FPP2 daemon push): refresh the
     /// on-screen rows for the current query, debounced.
     func refreshForRevision() {

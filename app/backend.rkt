@@ -369,6 +369,24 @@
                              "Save an AI API key"
                              "ai key <your-secret> · get one from your provider"
                              "" "")))]
+          ;; "ai model <name>" — the one-line model setter (model names are
+          ;; free-form, so a settings cycle does not fit).
+          [(string-prefix? lowered "ai model")
+           (define value-part
+             (string-trim (substring trimmed (min (string-length trimmed) 9))))
+           (if (non-empty-string? value-part)
+               (list (ai-row "ai.model"
+                             (format "Set AI model: ~a" value-part)
+                             (format "↵ saves · current: ~a"
+                                     (let ([m (settings-get (settings!) 'ai-model)])
+                                       (if (non-empty-string? m) m "provider default")))
+                             value-part "Set"))
+               (list (ai-row "ai.model"
+                             "Set the AI model"
+                             (format "ai model <name> · current: ~a"
+                                     (let ([m (settings-get (settings!) 'ai-model)])
+                                       (if (non-empty-string? m) m "provider default")))
+                             "" "")))]
           ;; Bare "ai": setup status / verb cheatsheet.
           [(string=? rest "")
            (if (equal? status "ready")
@@ -384,7 +402,7 @@
                     '())
                 (list (ai-row "ai.help"
                               (format "AI ready — ~a · ~a" provider (ai-effective-model))
-                              "ai summarize · ai clean · ai translate <lang> · ai explain · ai chat <msg> · ai <question>"
+                              "ai summarize · ai clean · ai translate <lang> · ai explain · ai chat <msg> · ai model <name> · ai <question>"
                               "" "ready")))
                (list (ai-row "ai.help"
                              "AI needs setup"
@@ -519,8 +537,18 @@
                  (cons "ok" (list (cons 'notify
                                         (format "AI key saved for ~a (local only)" provider)))))))
          (cons "empty key" '()))]
+    [(ai.model)
+     (define name (string-trim arg))
+     (cond
+       [(not (non-empty-string? name))
+        (cons "empty model name" '())]
+       [(> (string-length name) 128)
+        (cons "model name too long (max 128)" '())]
+       [else
+        (settings-set! (settings!) 'ai-model name)
+        (cons "ok" (list (cons 'notify (format "AI model = ~a" name))))])]
     [(ai.help)
-     (cons "ok" (list (cons 'notify "ai summarize · ai clean · ai translate <lang> · ai explain · ai <question>")))]
+     (cons "ok" (list (cons 'notify "ai summarize · ai clean · ai translate <lang> · ai explain · ai model <name> · ai <question>")))]
     [(ai.run) (ai-run! engine arg)]
     [(ai.copy) (ai-copy-last-answer)]
     [(ai.paste)

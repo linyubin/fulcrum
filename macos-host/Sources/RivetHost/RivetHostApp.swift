@@ -310,6 +310,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               } else {
                   self.model?.clearQuery()
               }
+            case 48:
+                  self.model?.completeFromSelection()     // tab autocomplete
+                  return nil
             case 40 where event.modifierFlags.contains(.command):
                   self.model?.openActionsForSelection()   // ⌘K
             case 125: self.model?.moveSelection(1)   // down

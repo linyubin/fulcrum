@@ -1187,6 +1187,25 @@ gboolean on_key_pressed(GtkEventControllerKey*, guint keyval, guint,
     return TRUE;
   }
   switch (keyval) {
+    case GDK_KEY_Tab:
+    case GDK_KEY_ISO_Left_Tab: {
+      // Autocomplete the selected row's title into the query field.
+      Launcher& launcher = Launcher::instance();
+      if (launcher.actions_mode || launcher.rows.empty()) {
+        return TRUE;
+      }
+      GtkListBoxRow* selected =
+          gtk_list_box_get_selected_row(launcher.results);
+      int index = selected != nullptr ? gtk_list_box_row_get_index(selected) : 0;
+      if (index < 0 || index >= static_cast<int>(launcher.rows.size())) {
+        index = 0;
+      }
+      gtk_editable_set_text(GTK_EDITABLE(launcher.search),
+                            launcher.rows[static_cast<std::size_t>(index)]
+                                .title.c_str());
+      gtk_editable_set_position(GTK_EDITABLE(launcher.search), -1);
+      return TRUE;
+    }
     case GDK_KEY_Escape:
       // Inside the action panel: back to the search rows first.
       if (Launcher::instance().actions_mode) {
