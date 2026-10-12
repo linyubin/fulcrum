@@ -87,6 +87,14 @@ struct MainWindow : MainWindowT<MainWindow> {
   // theme). The backend pushes changes afterwards via the reserved $state
   // events; this seeds the initial values.
   void PullHostSettings();
+  // Snippet auto-expansion (WH_KEYBOARD_LL): the hook proc is a free
+  // function so these must be public for it to call.
+  void InstallExpansionHook();
+  void RefreshExpansionData();
+  void RepairExpansion(std::size_t trigger_index);
+  void OnExpansionKey(std::uint32_t vk);
+  HHOOK expansion_hook_{nullptr};
+  std::atomic<bool> expansion_ignore_{false};
 
  private:
   void OnClipboardUpdate();
@@ -105,12 +113,6 @@ struct MainWindow : MainWindowT<MainWindow> {
   std::wstring last_status_;
   // Snippet auto-expansion (WH_KEYBOARD_LL): types the snippet text when
   // its keyword lands against a word boundary in any app.
-  void InstallExpansionHook();
-  void RefreshExpansionData();
-  void RepairExpansion(std::size_t trigger_index);
-  void OnExpansionKey(std::uint32_t vk);
-  HHOOK expansion_hook_{nullptr};
-  std::atomic<bool> expansion_ignore_{false};
   // Updater 0.2 (in-app install stays macOS-only on this line): the silent
   // launch check is throttled backend-side, and progress polling follows the
   // backend's download thread, surfacing percent in the status bar. Once the
