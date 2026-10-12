@@ -41,6 +41,13 @@ moved once; all three hosts ride together.
   curated plugin registry: signed index on Releases, PR-based
   submission, embedded gallery as the offline baseline)
 
+### Added (system commands)
+
+- **Toggle Dark Mode** on macOS (System Events appearance), Windows
+  (theme registry), and GNOME (color-scheme); **Sleep Display** on macOS
+  (already shipped, now listed alongside); **Log Out** and **Empty
+  Recycle Bin** on Windows; **Empty Trash** on GNOME.
+
 ### Fixed (file search was dead on large result sets)
 
 - **File search never returned results for common queries**: run-command
@@ -50,6 +57,14 @@ moved once; all three hosts ride together.
   dev machine). The stdout drain now runs concurrently with the exit
   wait; a search that used to return zero rows in 1.5 s now answers in
   ~180 ms with results. Regression test included.
+
+### Added (emoji search)
+
+- **Emoji search**: type two letters and matching emoji appear inline
+  (Raycast-style) — Enter pastes the character straight into the app you
+  came from, ⌘K/Ctrl+K copies it. A curated local dataset of ~300
+  popular emoji with English keywords; no network, no name-table
+  download.
 
 ### Added (Linux Wayland hotkey)
 

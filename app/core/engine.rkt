@@ -21,6 +21,7 @@
          "apps.rkt"
          "calc.rkt"
          "clipboard.rkt"
+         "emoji.rkt"
          "files.rkt"
          "fuzzy.rkt"
          "gallery.rkt"
@@ -459,6 +460,24 @@
                   (caddr entry)
                   65)))))
 
+;; Emoji search: inline results while typing (Raycast-style), Enter
+;; pastes the character straight into the frontmost app through the same
+;; host event a clipboard paste uses. Keyword-free and cheap: the dataset
+;; is a few hundred entries scanned per keystroke.
+(define (emoji-provider engine)
+  (lambda (query)
+    (define trimmed (string-trim query))
+    (if (< (string-length trimmed) 2)
+        '()
+        (for/list ([hit (in-list (emoji-search trimmed 4))])
+          (result "emoji.paste"
+                  (format "~a ~a" (car hit) (cadr hit))
+                  "Emoji · ↵ pastes into the frontmost app"
+                  "Emoji"
+                  (car hit) "emoji" "" ""
+                  (string-append (cadr hit) " " (car hit))
+                  45)))))
+
 ;; The plugin gallery rides the same row contract as everything else:
 ;; query "gallery"/"plugins" lists every first-party plugin (installed
 ;; rows uninstall, the rest install); any other query fuzzy-suggests
@@ -571,6 +590,8 @@
        (list (action-row "copy" "Copy path" "Copy" arg))]
       [(string=? id "web.open")
        (list (action-row "copy" "Copy URL" "Copy" arg))]
+      [(string=? id "emoji.paste")
+       (list (action-row "copy" "Copy emoji" "Copy" arg))]
       ;; FPP2 plugin results: the manager remembers each result's declared
       ;; actions (per-result wins over the command defaults) and whether
       ;; the row offered a detail view.
@@ -641,7 +662,8 @@
    ((plugins-provider engine) query)
    ((gallery-provider engine) query)
    ((window-provider engine) query)
-   ((files-provider engine) query)))
+   ((files-provider engine) query)
+   ((emoji-provider engine) query)))
 
 (define/contract (engine-search engine query)
   (-> engine? string? (listof (listof string?)))
@@ -814,6 +836,8 @@
      (finish (gallery-act! engine gallery-uninstall! "Uninstalled" arg))]
     [(string=? id "gallery.update")
      (finish (gallery-act! engine gallery-update! "Updated" arg))]
+    [(string=? id "emoji.paste")
+     (finish (cons "copied" (list (cons 'paste-to-frontmost arg))))]
     [(string-prefix? id "plugin:")
      (finish
       (let ([status (plugin-manager-run! (engine-plugins engine)
