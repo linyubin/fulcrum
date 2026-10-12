@@ -41,6 +41,16 @@ moved once; all three hosts ride together.
   curated plugin registry: signed index on Releases, PR-based
   submission, embedded gallery as the offline baseline)
 
+### Fixed (file search was dead on large result sets)
+
+- **File search never returned results for common queries**: run-command
+  waited for the child process to exit while the child blocked writing
+  output larger than the 64 KiB pipe buffer — a mutual deadlock that
+  timed out every search whose result set was big ("find README" on a
+  dev machine). The stdout drain now runs concurrently with the exit
+  wait; a search that used to return zero rows in 1.5 s now answers in
+  ~180 ms with results. Regression test included.
+
 ### Added (Linux Wayland hotkey)
 
 - The Linux host registers its summon shortcut through the

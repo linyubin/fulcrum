@@ -44,18 +44,27 @@
       (apply subprocess #f #f #f resolved args))
     (close-output-port stdin)
     ;; Racket has no subprocess exit event; a watcher thread provides one.
+    ;; The stdout DRAIN must run concurrently with the exit wait: a child
+    ;; that writes more than the 64 KiB pipe buffer blocks on write while
+    ;; the parent blocks on exit — a mutual deadlock that used to time out
+    ;; every file search whose result set was large.
     (define done (make-async-channel))
+    (define output-ch (make-async-channel 1))
     (parameterize ([current-custodian (make-custodian)])
       (thread (lambda ()
                 (subprocess-wait proc)
-                (async-channel-put done #t))))
+                (async-channel-put done #t)))
+      (thread (lambda ()
+                (async-channel-put output-ch (port->string stdout)))))
     (define exited (sync/timeout (/ timeout-ms 1000) done))
     (define output
-      (if exited
-          (port->string stdout)
-          (begin
-            (subprocess-kill proc #t)
-            #f)))
+      (cond
+        [exited
+         (define drained (sync/timeout 1 output-ch))
+         (if (string? drained) drained "")]
+        [else
+         (subprocess-kill proc #t)
+         #f]))
     (close-input-port stdout)
     (close-input-port stderr)
     output))

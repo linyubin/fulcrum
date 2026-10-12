@@ -18,3 +18,16 @@
 (test-case "spawn-command is fire-and-forget"
   (check-true (spawn-command "true" '()))
   (check-false (spawn-command "definitely-not-a-real-binary-xyz" '())))
+
+;; Regression: a child whose output exceeds the 64 KiB pipe buffer used to
+;; deadlock run-command (parent waited for exit, child blocked on write)
+;; and every large file search timed out. Unix-gated like the FPP1
+;; fixtures (/bin/sh).
+(when (member (system-type 'os) '(unix macosx))
+  (test-case "run-command drains output larger than the pipe buffer"
+    (define out
+      (run-command "/bin/sh"
+                   (list "-c" "yes hello-there | head -c 200000")
+                   #:timeout-ms 5000))
+    (check-true (string? out) "large output must not time out")
+    (check-true (> (string-length out) 100000))))
