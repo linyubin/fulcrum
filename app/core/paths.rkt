@@ -20,6 +20,7 @@
          snippets-path
          quicklinks-path
          ai-keys-path
+         ai-memory-path
          recents-path
          plugins-dir
          plugin-prefs-path
@@ -82,6 +83,12 @@
 ;; directory is a cloud folder, and this file holds secrets.
 (define (ai-keys-path)
   (build-path (data-dir) "ai-keys.json"))
+
+;; Persistent AI conversation memory (Raycast-2.0 "Memory" parity): the
+;; transcript and last answer survive restarts. Same policy as the keys
+;; file — local only, never synced, because a transcript is sensitive.
+(define (ai-memory-path)
+  (build-path (data-dir) "ai-memory.json"))
 
 (define (recents-path)
   (build-path (data-dir) "recents.json"))

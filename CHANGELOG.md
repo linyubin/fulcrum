@@ -41,6 +41,16 @@ moved once; all three hosts ride together.
   curated plugin registry: signed index on Releases, PR-based
   submission, embedded gallery as the offline baseline)
 
+### Added (Raycast 2.0 parity: the AI memory trio)
+
+- **Persistent AI memory**: the conversation transcript and last answer
+  survive restarts (ai-memory.json, local-only, never synced — a
+  transcript is sensitive)
+- **`ai undo`**: drop the last chat exchange and retry from there — the
+  minimal branching primitive
+- **`ai persona <text…>`**: persistent personalization, delivered as a
+  system message on every request
+
 ### Added (polish wave)
 
 - **`ai model <name>`**: set the AI model from the launcher — model names

@@ -48,6 +48,7 @@
          ai-last-answer
          ai-set-history!
          ai-set-last-answer!
+         ai-restore-memory!
          plugins-disabled-ids
          plugin-detail-rows
          row-actions-for
@@ -332,9 +333,46 @@
 (define (ai-last-answer)
   (unbox ai-last-answer-box))
 
-(define (ai-set-history! h) (set-box! ai-history-box h))
+;; Persistent memory (Raycast-2.0 "Memory" parity): the transcript and the
+;; last answer survive restarts. The file is local-only by construction —
+;; the same never-synced policy as ai-keys.json, because a transcript is
+;; sensitive.
+(define (ai-restore-memory!)
+  (with-handlers ([exn:fail? void])
+    (define raw (read-json-file (ai-memory-path) (hash)))
+    (when (hash? raw)
+      (define hist (hash-ref raw 'history '()))
+      ;; JSON arrays come back as lists; memory stores pairs.
+      (when (and (list? hist)
+                 (andmap (lambda (e)
+                           (and (list? e) (= (length e) 2)
+                                (string? (list-ref e 0))
+                                (string? (list-ref e 1))))
+                         hist))
+        (set-box! ai-history-box
+                  (for/list ([e (in-list hist)])
+                    (cons (list-ref e 0) (list-ref e 1)))))
+      (define last (hash-ref raw 'last-answer #f))
+      (when (string? last) (set-box! ai-last-answer-box last)))))
 
-(define (ai-set-last-answer! a) (set-box! ai-last-answer-box a))
+(define (ai-persist-memory!)
+  ;; Memory stores pairs; JSON needs lists. (The swallow-on-failure here
+  ;; once hid exactly this: pairs are not jsexpr, so nothing was ever
+  ;; written and the "persistence" silently saved nothing.)
+  (with-handlers ([exn:fail? void])
+    (write-json-atomic!
+     (ai-memory-path)
+     (hasheq 'history (for/list ([e (in-list (ai-history))])
+                        (list (car e) (cdr e)))
+             'last-answer (ai-last-answer)))))
+
+(define (ai-set-history! h)
+  (set-box! ai-history-box h)
+  (ai-persist-memory!))
+
+(define (ai-set-last-answer! a)
+  (set-box! ai-last-answer-box a)
+  (ai-persist-memory!))
 
 (define (ai-copy-last-answer)
   (define answer (ai-last-answer))
@@ -369,6 +407,38 @@
                              "Save an AI API key"
                              "ai key <your-secret> · get one from your provider"
                              "" "")))]
+          ;; "ai undo" — drop the last chat exchange (the minimal
+          ;; branching primitive: roll the conversation back to try a
+          ;; different direction).
+          [(string=? lowered "ai undo")
+           (if (null? (ai-history))
+               (list (ai-row "ai.undo" "Nothing to undo"
+                             "the conversation has no exchanges yet" "" ""))
+               (list (ai-row "ai.undo"
+                             "Undo the last exchange"
+                             (format "↵ drops ~a and retries from there"
+                                     (let ([last (cdr (reverse (ai-history)))])
+                                       (if (and (pair? last) (string? (cdar last)))
+                                           (format "“~a”" (cdar last))
+                                           "the last exchange"))))
+                     "" ""))]
+          ;; "ai persona <text…>" — persistent personalization: the text
+          ;; rides a system message on every request.
+          [(string-prefix? lowered "ai persona")
+           (define value-part
+             (string-trim (substring trimmed (min (string-length trimmed) 11))))
+           (define current (settings-get (settings!) 'ai-persona))
+           (if (non-empty-string? value-part)
+               (list (ai-row "ai.persona"
+                             (format "Set AI persona: ~a" value-part)
+                             (format "↵ saves · current: ~a"
+                                     (if (non-empty-string? current) current "none"))
+                             value-part "Set"))
+               (list (ai-row "ai.persona"
+                             "Set the AI persona"
+                             (format "ai persona <text…> · current: ~a"
+                                     (if (non-empty-string? current) current "none"))
+                             "" "")))]
           ;; "ai model <name>" — the one-line model setter (model names are
           ;; free-form, so a settings cycle does not fit).
           [(string-prefix? lowered "ai model")
@@ -402,7 +472,7 @@
                     '())
                 (list (ai-row "ai.help"
                               (format "AI ready — ~a · ~a" provider (ai-effective-model))
-                              "ai summarize · ai clean · ai translate <lang> · ai explain · ai chat <msg> · ai model <name> · ai <question>"
+                              "ai summarize · ai clean · ai translate <lang> · ai explain · ai chat <msg> · ai undo · ai persona <text> · ai model <name> · ai <question>"
                               "" "ready")))
                (list (ai-row "ai.help"
                              "AI needs setup"
@@ -525,6 +595,22 @@
      (start-ai-stream! chat? arg prompt)
      (cons "started" '())]))
 
+;; Drop the last chat exchange — the minimal branching primitive: roll
+;; the conversation back to try a different direction.
+(define (ai-undo-exchange!)
+  (define hist (ai-history))
+  (cond
+    [(null? hist) (cons "nothing to undo" '())]
+    [else
+     (define kept
+       (let loop ([h hist])
+         (if (<= (length h) 2)
+             '()
+             (cons (car h) (loop (cdr h))))))
+     (ai-set-history! kept)
+     (ai-set-last-answer! "")
+     (cons "ok" (list (cons 'notify "Undone: dropped the last exchange")))]))
+
 (define (ai-act! engine id arg)
   (case (string->symbol id)
     [(ai.key)
@@ -537,6 +623,17 @@
                  (cons "ok" (list (cons 'notify
                                         (format "AI key saved for ~a (local only)" provider)))))))
          (cons "empty key" '()))]
+    [(ai.undo) (ai-undo-exchange!)]
+    [(ai.persona)
+     (define text (string-trim arg))
+     (cond
+       [(not (non-empty-string? text))
+        (cons "empty persona" '())]
+       [(> (string-length text) 2048)
+        (cons "persona too long (max 2048)" '())]
+       [else
+        (settings-set! (settings!) 'ai-persona text)
+        (cons "ok" (list (cons 'notify "AI persona saved")))])]
     [(ai.model)
      (define name (string-trim arg))
      (cond
@@ -1419,6 +1516,7 @@
   ;; The updater persists its throttle and rollout bucket in the settings
   ;; store; hand it the manager once it exists.
   (current-update-settings manager)
+  (ai-restore-memory!)
   (state-set! theme (settings-get manager 'theme))
   (state-set! hotkey (settings-get manager 'hotkey))
   (serve-fds in-fd out-fd))

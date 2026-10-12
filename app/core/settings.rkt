@@ -97,6 +97,9 @@
    'ai-model
    (list string? ""
          "AI model; empty uses the provider default (gpt-4o-mini / claude-3-5-haiku / llama3.2)")
+   'ai-persona
+   (list string? ""
+         "AI persona: persistent customization prepended as a system message to every request")
    'ai-base-url
    (list (lambda (v) (or (string=? v "") (string-prefix? v "http")))
          ""

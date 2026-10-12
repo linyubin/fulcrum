@@ -207,12 +207,46 @@
        (check-true (or (equal? model-set "ok")
                        (equal? model-set 'emit-error)))
 
+       ;; "ai persona <text>" persists; bare "ai persona" shows it.
+       (check-equal? (row-arg (car (ai-rows "ai persona"))) "")
+       (define persona-rows (ai-rows "ai persona 说话像海盗"))
+       (check-equal? (row-id (car persona-rows)) "ai.persona")
+       (check-equal? (row-arg (car persona-rows)) "说话像海盗")
+
        ;; Chat reset clears memory.
        (ai-set-history! (ai-history-append '() "q" "a"))
        (with-handlers ([exn:fail? void])
          (run-action "ai.reset" ""))
        (check-equal? (ai-history) '())
-       (check-equal? (ai-last-answer) "")))))
+       (check-equal? (ai-last-answer) "")
+
+       ;; Undo drops the last exchange.
+       (ai-set-history! (ai-history-append '() "q1" "a1"))
+       (ai-set-history! (ai-history-append (ai-history) "q2" "a2"))
+       (with-handlers ([exn:fail? void])
+         (run-action "ai.undo" ""))
+       (check-equal? (length (ai-history)) 2)
+
+       ;; Memory persists to disk and restores.
+       (ai-set-history! (ai-history-append '() "saved q" "saved a"))
+       (ai-set-last-answer! "saved answer")
+       (check-true (file-exists? (ai-memory-path)))
+       ;; Simulate a restart: snapshot the persisted file, wipe the live
+       ;; boxes (which persists the wipe), put the snapshot back, restore.
+       (define snapshot (file->string (ai-memory-path)))
+       (ai-set-history! '())
+       (ai-set-last-answer! "")
+       (call-with-output-file (ai-memory-path)
+         (lambda (o) (display snapshot o)) #:exists 'truncate)
+       (ai-restore-memory!)
+       (check-equal? (ai-history)
+                     (ai-history-append '() "saved q" "saved a"))
+       (check-equal? (ai-last-answer) "saved answer")
+
+       ;; Persona round-trips through the settings store.
+       (with-handlers ([exn:fail? void])
+         (run-action "ai.persona" "说话像海盗"))
+       (check-equal? (settings-get manager 'ai-persona) "说话像海盗")))))
 
 ;; Streaming wire formats, parsed without any network: the three provider
 ;; framings, plus the framing lines every reader must skip.

@@ -325,10 +325,12 @@
 
 (define/contract (ai-request-streaming provider base-url key model prompt
                                        #:history [history '()]
+                                       #:system [system ""]
                                        #:on-delta [on-delta void]
                                        #:timeout-ms [timeout-ms 45000])
   (->* (string? string? string? string? string?)
        (#:history (listof (cons/c string? string?))
+        #:system string?
         #:on-delta (-> string? any/c)
         #:timeout-ms exact-nonnegative-integer?)
        string?)
@@ -337,7 +339,10 @@
   (define prefix (cdr host+prefix))
   (define ssl? (string-prefix? base-url "https://"))
   (define messages
-    (append (for/list ([pair (in-list history)])
+    (append (if (non-empty-string? system)
+                (list (hasheq 'role "system" 'content system))
+                '())
+            (for/list ([pair (in-list history)])
               (hasheq 'role (car pair) 'content (cdr pair)))
             (list (hasheq 'role "user" 'content prompt))))
   (define path
