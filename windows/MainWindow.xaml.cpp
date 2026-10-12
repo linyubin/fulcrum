@@ -903,7 +903,7 @@ void MainWindow::RunSelected() {
   std::thread([weak, api, dispatcher, row]() mutable {
     try {
       auto const status = api->run_action(row.id, row.arg).get();
-      dispatcher.TryEnqueue([weak, status, row]() mutable {
+      dispatcher.TryEnqueue([weak, dispatcher, status, row]() mutable {
         if (auto window = weak.get()) {
           if (status == "ok" || status == "launched" || status == "copied" ||
               status == "opened") {
@@ -924,11 +924,12 @@ void MainWindow::RunSelected() {
           } else if (status == "detail") {
             // FPP2 plugin detail: fetch the payload and show it in the
             // panel slot. The RPC runs off the UI thread; the result
-            // paints through the dispatcher.
+            // paints through the dispatcher (captured below — the
+            // TryEnqueue lambda would not otherwise see it).
             window->DismissDetailPanel();
             auto* api2 = window->api_.get();
-            auto const row_id = to_utf8(row.id);
-            auto const row_arg = to_utf8(row.arg);
+            auto const row_id = row.id;   // rows are already UTF-8
+            auto const row_arg = row.arg;
             std::thread([weak, dispatcher, api2, row_id, row_arg]() mutable {
               try {
                 auto view = api2->plugin_detail(row_id, row_arg).get();
