@@ -141,15 +141,17 @@ JSON
   (make-directory* state-dir)
   (define plug (build-path dir "fpp2d"))
   (make-directory* plug)
+  ;; A Windows racket path carries backslashes, which are JSON escape
+  ;; characters — double them before substituting into the manifest.
+  (define racket-json
+    (string-replace (path->string racket-path) "\\" "\\\\"))
   (write-file! (build-path plug "manifest.json")
-               (string-replace fixture-manifest "RACKET"
-                               (path->string racket-path)))
+               (string-replace fixture-manifest "RACKET" racket-json))
   (write-file! (build-path plug "fixture.rkt") fixture-script)
   (define bad (build-path dir "badpref"))
   (make-directory* bad)
   (write-file! (build-path bad "manifest.json")
-               (string-replace bad-pref-manifest "RACKET"
-                               (path->string racket-path)))
+               (string-replace bad-pref-manifest "RACKET" racket-json))
   (write-file! (build-path bad "fixture.rkt") fixture-script)
   (dynamic-wind
     (lambda () (thunk dir state-dir))
