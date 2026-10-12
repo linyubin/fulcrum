@@ -1472,11 +1472,6 @@ void on_activate(GtkApplication* app, gpointer) {
   if (!hotkey_note.empty()) {
     launcher.set_status(hotkey_note);
   }
-  std::string hotkey_note =
-      install_x11_hotkey(gtk_widget_get_display(window), launcher.window);
-  if (!hotkey_note.empty()) {
-    launcher.set_status(hotkey_note);
-  }
 
   launcher.start_backend();
 }
