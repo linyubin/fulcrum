@@ -258,7 +258,7 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
         if (*state_name == "ai-stream") {
           rivet_app::AiStream stream;
           try {
-            stream = rivet_app::decode_AiStream(fields->at(1));
+            stream = rivet_app::detail::decode_AiStream(fields->at(1));
           } catch (...) {
             return;
           }
