@@ -388,10 +388,15 @@ struct LauncherView: View {
                       : "↑↓ navigate · ↵ run · ⌘K actions · esc clear/hide")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
                 Spacer()
-                Text("Fulcrum")
+                Text(model.status)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .textSelection(.enabled)
+                    .help(model.status)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 9)
@@ -648,6 +653,11 @@ final class LauncherModel: ObservableObject {
                         // AI run: the request continues on a backend thread;
                         // the ai-stream State drives the streaming panel.
                         self.status = "AI is answering…"
+                    case "stay":
+                        // The result is meant to be read (update check, …):
+                        // the notify event already wrote the status line;
+                        // keep the panel open so it stays visible.
+                        break
                     case "detail":
                         // FPP2 plugin detail: fetch the payload and show it
                         // in the panel slot; the row stays put behind it.

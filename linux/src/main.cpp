@@ -889,6 +889,7 @@ struct Launcher {
                          boxed->status == "opened" ||
                          boxed->status == "started" ||
                          boxed->status == "detail" ||
+                         boxed->status == "stay" ||
                          boxed->status == "downloading" ||
                          boxed->status == "delegated";
       } catch (std::exception const& e) {
@@ -911,6 +912,12 @@ struct Launcher {
             // AI run: the request continues on a backend thread; the
             // ai-stream State drives the streaming panel.
             Launcher::instance().set_status("AI is answering…");
+            return G_SOURCE_REMOVE;
+          }
+          if (job->status == "stay") {
+            // The result is meant to be read (update check, ...): the
+            // notify event already wrote the status line (selectable, so
+            // errors can be copied); keep the panel open.
             return G_SOURCE_REMOVE;
           }
           if (job->status == "detail") {
@@ -1265,6 +1272,7 @@ void on_activate(GtkApplication* app, gpointer) {
 
   auto* status = gtk_label_new("Starting embedded Racket CS…");
   gtk_label_set_xalign(GTK_LABEL(status), 0.0);
+  gtk_label_set_selectable(GTK_LABEL(status), TRUE);
   gtk_widget_set_margin_start(status, 12);
   gtk_widget_set_margin_top(status, 6);
   launcher.status = GTK_LABEL(status);

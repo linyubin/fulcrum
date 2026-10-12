@@ -435,6 +435,8 @@ void MainWindow::FinishNativeSetup() {
   tray_icon_ = std::make_unique<rivet::system::TrayIcon>(
       hwnd, kTrayIconId, kTrayCallbackMessage, L"Fulcrum", tray_hicon);
 
+  AttachStatusBarCopyAffordance();
+
   // WinUI Window has no Deactivated event; the Activated state carries it.
   this->Activated([this](auto&&,
                          winrt::Microsoft::UI::Xaml::WindowActivatedEventArgs const& args) {
@@ -916,6 +918,9 @@ void MainWindow::RunSelected() {
             // AI run: the request continues on a backend thread; the
             // ai-stream State drives the streaming panel.
             window->SetStatusOk(L"AI is answering…");
+          } else if (status == "stay") {
+            // The result is meant to be read (update check, ...): the
+            // event already wrote the status line; keep the panel open.
           } else if (status == "detail") {
             // FPP2 plugin detail: fetch the payload and show it in the
             // panel slot. The RPC runs off the UI thread; the result
@@ -971,14 +976,29 @@ void MainWindow::RunSelected() {
 }
 
 void MainWindow::SetStatusOk(std::wstring const& message) {
+  last_status_ = message;
   StatusBar().Severity(
       Microsoft::UI::Xaml::Controls::InfoBarSeverity::Success);
   StatusBar().Message(message);
 }
 
 void MainWindow::SetStatusError(std::wstring const& message) {
+  last_status_ = message;
   StatusBar().Severity(Microsoft::UI::Xaml::Controls::InfoBarSeverity::Error);
   StatusBar().Message(message);
+}
+
+// Right-click the status bar → "Copy message": errors and results that
+// only live in the status line must be copyable.
+void MainWindow::AttachStatusBarCopyAffordance() {
+  auto flyout = winrt::Microsoft::UI::Xaml::Controls::MenuFlyout{};
+  auto item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
+  item.Text(L"Copy message");
+  item.Click([this](auto&&, auto&&) {
+    WriteClipboardText(last_status_);
+  });
+  flyout.Items().Append(item);
+  StatusBar().ContextFlyout(flyout);
 }
 
 void MainWindow::StartSilentUpdateCheck() {

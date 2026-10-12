@@ -99,6 +99,10 @@ struct MainWindow : MainWindowT<MainWindow> {
   void ApplyResults(std::vector<rivet_app::ResultRow> rows);
   void SetStatusOk(std::wstring const& message);
   void SetStatusError(std::wstring const& message);
+  // The last status-line message, for the right-click "Copy message"
+  // affordance on the status bar (errors must be copyable).
+  void AttachStatusBarCopyAffordance();
+  std::wstring last_status_;
   // Updater 0.2 (in-app install stays macOS-only on this line): the silent
   // launch check is throttled backend-side, and progress polling follows the
   // backend's download thread, surfacing percent in the status bar. Once the

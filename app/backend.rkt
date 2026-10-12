@@ -1316,18 +1316,26 @@
 (define (update-act! id)
   (case (string->symbol id)
     [(update.check)
+     ;; "stay", not "ok": the hosts keep the panel open on "stay" so the
+     ;; user can actually read the result (an "ok" hides the panel before
+     ;; the notify message is readable — and before an error could ever
+     ;; be copied).
      (define record (update-check! #t))
      (case (record-ref record 'status)
        [(available)
-        (cons "ok" (list (cons 'notify
-                                (format "Update available: Fulcrum v~a (~a)"
-                                        (record-ref record 'available-version)
-                                        (format-bytes
-                                         (or (record-ref record 'size-bytes) 0))))))]
+        (cons "stay"
+              (list (cons 'notify
+                          (format "Update available: Fulcrum v~a (~a)"
+                                  (record-ref record 'available-version)
+                                  (format-bytes
+                                   (or (record-ref record 'size-bytes) 0))))))]
        [(up-to-date)
-        (cons "ok" (list (cons 'notify
-                                (format "Fulcrum v~a is up to date" app-version))))]
-       [else (cons (or (record-ref record 'error) "update check failed") '())])]
+        (cons "stay"
+              (list (cons 'notify
+                          (format "Fulcrum v~a is up to date" app-version))))]
+       [else (cons (format "update check failed: ~a"
+                           (or (record-ref record 'error) "unknown reason"))
+                   '())])]
     [(update.download)
      (with-handlers
          ([exn:fail? (lambda (e)
