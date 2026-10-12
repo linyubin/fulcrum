@@ -1258,7 +1258,10 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_window_set_title(launcher.window, "Fulcrum");
   gtk_window_set_default_size(launcher.window, 680, 440);
   gtk_window_set_resizable(launcher.window, FALSE);
-  gtk_window_set_hide_on_close(launcher.window, FALSE);
+  // The WM's close button HIDES, exactly like the other hosts: the
+  // process stays resident (hotkey / --toggle / tray summon it back).
+  // A close that quits would strand the user with no way to summon.
+  gtk_window_set_hide_on_close(launcher.window, TRUE);
   gtk_widget_add_css_class(window, "fulcrum-window");
 
   auto* root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

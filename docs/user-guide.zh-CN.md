@@ -162,6 +162,7 @@ Fulcrum 的 AI 是 BYOK 模式：用你自己的 OpenAI、Anthropic 或本地 Ol
 - **快捷键没反应。** 组合键被别的应用占了。Fulcrum 会退到 `Ctrl+Alt+Space` 并在状态栏说明；也可以从托盘图标（Windows）、菜单栏（macOS）或 `fulcrum --toggle`（Linux）打开。
 - **macOS 上「粘贴到前台」没反应。** 合成按键需要辅助功能权限：系统设置 → 隐私与安全性 → 辅助功能 → 勾选 Fulcrum。窗口管理命令用的是同一个权限。
 - **Linux 上「粘贴到前台」。** X11 开箱即用。Wayland 需要安装 `wtype`（合成器不允许应用直接注入输入——这是安全特性，Fulcrum 尊重它）。
+- **Linux（Wayland）：快捷键没反应、也没有托盘。** Wayland 合成器禁止应用做全局按键抓取——这是平台的安全设计，不是 Fulcrum 的 bug（用 `echo $XDG_SESSION_TYPE` 可确认会话类型）。受支持的做法：在合成器里自定义快捷键绑定 `fulcrum --toggle`（GNOME：设置 → 键盘 → 自定义快捷键；KDE：系统设置 → 快捷键）。开机常驻：添加自启动条目 `~/.config/autostart/fulcrum.desktop`，`Exec=/path/to/fulcrum`——应用启动后隐藏驻留，`fulcrum --toggle` 呼出。关闭面板只是隐藏，不会退出。
 - **AI 提示没有密钥。** 先在设置里选好服务商，再运行 `ai key <密钥>`。Ollama 不需要密钥，只要 `ollama serve` 在跑。
 - **Linux 上剪贴板历史是空的。** 只记录 Fulcrum 运行期间的复制，面板只显示启动以来捕获的内容。
 - **数据都在哪？** 全部在一个数据目录里（`FULCRUM_DATA_DIR`）：各存储是 JSON，密钥在 `ai-keys.json`。删掉它，Fulcrum 就是全新状态。
