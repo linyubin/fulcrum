@@ -816,6 +816,7 @@ struct Launcher {
     bool success{false};
     std::string status;
     std::string action_id;
+    std::string arg;
   };
 
   void show_actions_for_selection() {
@@ -879,6 +880,7 @@ struct Launcher {
     std::thread([api_raw, row]() mutable {
       auto* boxed = new RunOutcome;
       boxed->action_id = row.id;
+      boxed->arg = row.arg;
       try {
         boxed->status = api_raw->run_action(row.id, row.arg).get();
         boxed->success = boxed->status == "ok" ||
@@ -918,7 +920,7 @@ struct Launcher {
             Launcher::instance().dismiss_detail_panel();
             std::string const row_id = job->action_id;
             auto* api_raw = Launcher::instance().api.get();
-            std::thread([api_raw, row_id, arg = std::string(row.arg)]() mutable {
+            std::thread([api_raw, row_id, arg = job->arg]() mutable {
               try {
                 auto view = api_raw->plugin_detail(row_id, arg).get();
                 g_idle_add([](gpointer user_data) -> int {
