@@ -155,7 +155,12 @@ JSON
   (write-file! (build-path bad "fixture.rkt") fixture-script)
   (dynamic-wind
     (lambda () (thunk dir state-dir))
-    (lambda () (delete-directory/files dir))
+    (lambda ()
+      (with-handlers ([exn:fail? void])
+        ;; A daemon-mode child may still be alive here (Windows locks the
+        ;; executing script and its cwd); leftover temp dirs on a runner
+        ;; are harmless, a failed teardown is not.
+        (delete-directory/files dir)))
     (lambda () void)))
 
 ;; ---- manifest v2 parsing (no spawn) ---------------------------------------
