@@ -172,7 +172,7 @@
                                    "no AI answer"))
 
        ;; After a (simulated) answer the last-answer row offers the copy.
-       (current-ai-last-answer "entropy is a measure of disorder")
+       (ai-set-last-answer! "entropy is a measure of disorder")
        (define rows (rows-for engine "ai"))
        (define last-row
          (findf (lambda (r) (equal? (list-ref r 0) "ai.copy")) rows))
@@ -181,9 +181,58 @@
                      "entropy is a measure of disorder")
        (check-equal? (car (ai-copy-last-answer)) "copied")
 
+       ;; The ⌘K panel of the last-answer row offers paste-back; running
+       ;; it hands the answer to the host event — the emit needs a live
+       ;; server, so the check is that the "no AI answer" refusal is gone
+       ;; and the action reaches the event stage.
+       (define panel (row-actions-for "ai.copy" "entropy is a measure of disorder"))
+       (check-equal? (list-ref (car panel) 0) "ai.paste")
+       (define paste-error
+         (with-handlers ([exn:fail? exn-message])
+           (run-action "ai.paste" "")))
+       (check-true (string-contains? paste-error "no Rivet server"))
+
        ;; Chat reset clears memory.
-       (current-ai-history (ai-history-append '() "q" "a"))
+       (ai-set-history! (ai-history-append '() "q" "a"))
        (with-handlers ([exn:fail? void])
          (run-action "ai.reset" ""))
-       (check-equal? (current-ai-history) '())
-       (check-equal? (current-ai-last-answer) "")))))
+       (check-equal? (ai-history) '())
+       (check-equal? (ai-last-answer) "")))))
+
+;; Streaming wire formats, parsed without any network: the three provider
+;; framings, plus the framing lines every reader must skip.
+(test-case "stream-line->delta parses openai SSE"
+  (define piece (stream-line->delta
+                 "openai"
+                 "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}"))
+  (check-equal? piece (cons "Hel" #f))
+  (check-equal? (stream-line->delta "openai" "data: [DONE]") (cons "" #t))
+  ;; role-only deltas carry no content: empty piece, stream continues.
+  (check-equal? (stream-line->delta
+                 "openai"
+                 "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}")
+                (cons "" #f))
+  (check-false (stream-line->delta "openai" ": keep-alive comment")))
+
+(test-case "stream-line->delta parses anthropic SSE"
+  (define piece
+    (stream-line->delta
+     "anthropic"
+     "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"lo\"}}"))
+  (check-equal? piece (cons "lo" #f))
+  (check-equal? (stream-line->delta
+                 "anthropic"
+                 "data: {\"type\":\"message_stop\"}")
+                (cons "" #t))
+  ;; Message lifecycle events are framing, not text.
+  (check-equal? (stream-line->delta
+                 "anthropic"
+                 "data: {\"type\":\"message_start\"}")
+                (cons "" #f)))
+
+(test-case "stream-line->delta parses ollama NDJSON"
+  (define piece
+    (stream-line->delta "ollama" "{\"message\":{\"content\":\"hi\"},\"done\":false}"))
+  (check-equal? piece (cons "hi" #f))
+  (check-equal? (stream-line->delta "ollama" "{\"message\":{},\"done\":true}")
+                (cons "" #t)))

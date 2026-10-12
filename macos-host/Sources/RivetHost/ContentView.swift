@@ -190,6 +190,73 @@ struct ResultRowView: View {
     }
 }
 
+/// Live AI answer, decoded from the ai-stream State the backend pushes
+/// while the model responds. Idle means "nothing to show".
+struct AiStreamState: Equatable {
+    let phase: String
+    let text: String
+    let error: String?
+}
+
+/// The streaming answer panel: a header with the live phase, the growing
+/// text, and the hand-off hint once the answer is on the clipboard.
+struct AiStreamView: View {
+    let state: AiStreamState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(FulcrumTheme.accent)
+                Text(header)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if state.phase == "running" {
+                    ProgressView()
+                        .controlSize(.mini)
+                }
+            }
+            ScrollView {
+                Text(displayText)
+                    .font(.system(size: 12.5))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 170)
+            if state.phase == "done" {
+                Text("Answer copied to the clipboard · esc dismisses")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.tertiary)
+            }
+            if let error = state.error, !error.isEmpty {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
+
+    private var header: String {
+        switch state.phase {
+        case "running": return "AI is answering…"
+        case "error": return "AI request failed"
+        default: return "AI answer"
+        }
+    }
+
+    private var displayText: String {
+        if state.phase == "running" {
+            return state.text.isEmpty ? "…" : state.text + " ▍"
+        }
+        return state.text
+    }
+}
+
 /// The launcher panel UI: one query field, one result list, one status line.
 /// All state lives in LauncherModel; this view is deliberately dumb.
 struct LauncherView: View {
@@ -216,6 +283,11 @@ struct LauncherView: View {
             .padding(.vertical, 15)
 
             Divider().opacity(0.5)
+
+            if let ai = model.aiStream, ai.phase != "idle" {
+                AiStreamView(state: ai)
+                Divider().opacity(0.5)
+            }
 
             if model.ready {
                 ScrollViewReader { proxy in
@@ -283,6 +355,8 @@ struct FulcrumAPI {
     }
 
     func health() async throws -> String { try await generated.health() }
+    func getHotkey() async throws -> String { try await generated.get_hotkey() }
+    func getTheme() async throws -> String { try await generated.get_theme() }
     func search(_ query: String) async throws -> [ResultRow] {
         (try await generated.search(query: query)).compactMap { ResultRow.from($0) }
     }
@@ -325,6 +399,9 @@ final class LauncherModel: ObservableObject {
     @Published var status = "Starting embedded Racket CS…"
     /// ⌘K mode: rows currently holds secondary actions for `actionParent`.
     @Published var showingActions = false
+    /// Live AI answer (nil = nothing to show); survives typing so the user
+    /// can keep reading while the model finishes.
+    @Published var aiStream: AiStreamState?
     private var actionParent: ResultRow?
 
     var onToggle: (() -> Void)?
@@ -365,7 +442,7 @@ final class LauncherModel: ObservableObject {
                         guard let model = LauncherModel.active else { return }
                         model.api = api
                         model.ready = true
-                        model.status = "Ready — press ⌥Space anywhere"
+                        model.status = "Ready"
                         model.beginSearch()
                         model.onBackendReady?()
                     }
@@ -390,6 +467,11 @@ final class LauncherModel: ObservableObject {
     func clearQuery() {
         query = ""
         searchChanged("")
+    }
+
+    /// Esc with a finished AI answer on screen: dismiss the panel only.
+    func dismissAiStream() {
+        aiStream = nil
     }
 
     func queryChanged(_ text: String) {
@@ -469,6 +551,10 @@ final class LauncherModel: ObservableObject {
                         } else {
                             self.hide()
                         }
+                    case "started":
+                        // AI run: the request continues on a backend thread;
+                        // the ai-stream State drives the streaming panel.
+                        self.status = "AI is answering…"
                     case "quit-and-install":
                         UpdateController.shared?.quitAndInstall()
                     case "downloading":
@@ -524,8 +610,36 @@ final class LauncherModel: ObservableObject {
     }
 
     private func handleEvent(name: String, value: RivetValue) {
-        // Every backend event carries a bare String payload (RVT1 event
-        // frames are [name, value]; the runtime hands us value directly).
+        // Shared-state pushes arrive as reserved "$state" events carrying
+        // [state-name, wire-value]; everything else is a bare String.
+        if name == "$state" {
+            guard let change = RivetClient.stateChange(eventName: name,
+                                                       value: value) else { return }
+            switch change.name {
+            case "theme":
+                if case .string(let theme) = change.value {
+                    AppDelegate.applyTheme(theme)
+                }
+            case "hotkey":
+                if case .string(let spec) = change.value {
+                    AppDelegate.shared?.applyHotkey(spec)
+                }
+            case "ai-stream":
+                if case .list(let fields) = change.value, fields.count == 3,
+                   case .string(let phase) = fields[0],
+                   case .string(let text) = fields[1] {
+                    var error: String?
+                    if case .string(let message) = fields[2] { error = message }
+                    aiStream = AiStreamState(phase: phase, text: text,
+                                             error: error)
+                }
+            default:
+                break
+            }
+            return
+        }
+        // Every other backend event carries a bare String payload (RVT1
+        // event frames are [name, value]; the runtime hands us value).
         let payload: String
         if case .string(let text) = value {
             payload = text
@@ -537,6 +651,14 @@ final class LauncherModel: ObservableObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(payload, forType: .string)
             hide()
+        case "paste-to-frontmost":
+            pasteToFrontmost(payload)
+        case "ai-finished":
+            // The answer lands on the clipboard, but the panel stays: the
+            // user is reading the streamed text right now.
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(payload, forType: .string)
+            status = "Answer copied to the clipboard"
         case "open-url":
             if let url = URL(string: payload) {
                 NSWorkspace.shared.open(url)
@@ -548,6 +670,35 @@ final class LauncherModel: ObservableObject {
             UpdateController.shared?.offered()
         default:
             break
+        }
+    }
+
+    /// Paste-to-frontmost: write the pasteboard, step the app aside so the
+    /// previous one is frontmost again, then synthesize ⌘V. Accessibility
+    /// trust is required for the synthetic keystroke (the same permission
+    /// window management already asks for).
+    private func pasteToFrontmost(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        hide()
+        NSApp.hide(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard AXIsProcessTrusted() else {
+                self?.status = WindowCommands.permissionHint
+                return
+            }
+            let source = CGEventSource(stateID: .combinedSessionState)
+            let cmdDown = CGEvent(keyboardEventSource: source,
+                                  virtualKey: 55, keyDown: true)
+            let vDown = CGEvent(keyboardEventSource: source,
+                                virtualKey: 9, keyDown: true)
+            let vUp = CGEvent(keyboardEventSource: source,
+                              virtualKey: 9, keyDown: false)
+            let cmdUp = CGEvent(keyboardEventSource: source,
+                                virtualKey: 55, keyDown: false)
+            for event in [cmdDown, vDown, vUp, cmdUp] {
+                event?.post(tap: .cghidEventTap)
+            }
         }
     }
 

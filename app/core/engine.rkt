@@ -199,7 +199,7 @@
               (if (> (string-length text) 120)
                   (string-append (substring text 0 120) "…")
                   text)))
-          (result "clip.copy" preview
+          (result "clip.paste" preview
                   (format "~a · pinned: ~a"
                           (clipboard-item-id item)
                           (if (clipboard-item-pinned? item) "yes" "no"))
@@ -213,16 +213,23 @@
   (define store (engine-snippets engine))
   (if store
       (lambda (query)
-        (for/list ([s (in-list (if (zero? (string-length query))
-                                   (let ([all (snippet-list store)])
-                                     (take all (min 6 (length all))))
-                                   (snippet-search store query)))])
-          (result "snip.copy" (snippet-name s)
-                  (snippet-keyword s) "Snippet"
-                  (snippet-id s) "snippet" "" ""
-                  (string-append (snippet-name s) " " (snippet-keyword s) " " (snippet-text s))
-                  (if (zero? (string-length query)) 60 85))))
+        (cond
+          ;; The store's own name lists everything — the discoverable
+          ;; entry when no snippet name matches the query yet.
+          [(member (string-downcase query) '("snippets" "snippet" "snip"))
+           (for/list ([s (in-list (snippet-list store))])
+             (snippet-row s 110))]
+          [else
+           (for/list ([s (in-list (snippet-search store query))])
+             (snippet-row s (if (zero? (string-length query)) 60 85)))]))
       (lambda (query) '())))
+
+(define (snippet-row s priority)
+  (result "snip.copy" (snippet-name s)
+          (snippet-keyword s) "Snippet"
+          (snippet-id s) "snippet" "" ""
+          (string-append (snippet-name s) " " (snippet-keyword s) " " (snippet-text s))
+          priority))
 
 (define (web-provider engine)
   (lambda (query)
@@ -349,6 +356,45 @@
                              (string-append kw "\u001F" url "\u001F" display)
                              "link" "" "Create"
                              (string-append "add quicklink " kw)
+                             120)))))
+            '()))
+      (lambda (query) '())))
+
+;; `add snippet <keyword> <text…>` mirrors the quicklink one-liner: the
+;; keyword becomes the snippet's name and its claim, the text is the rest
+;; of the line (spaces allowed). The packed payload travels in the arg.
+;; The prefix match keeps no trailing space so the syntax hint appears as
+;; soon as the user types "add snippet".
+(define add-snippet-prefix "add snippet")
+
+(define (add-snippet-provider engine)
+  (define store (engine-snippets engine))
+  (if store
+      (lambda (query)
+        (if (string-prefix? (string-downcase query) add-snippet-prefix)
+            (let* ([rest (regexp-replace #px"^\\s+" (substring query (string-length add-snippet-prefix)) "")]
+                   [parts (string-split rest " " #:trim? #f)])
+              (if (or (< (length parts) 2)
+                      (string=? (string-trim (car parts)) ""))
+                  (list (result "noop"
+                                "Add a snippet"
+                                "add snippet <keyword> <text…> · the keyword claims it, ↵ saves"
+                                "Snippet" "" "snippet" "" "" "" 120))
+                  (let* ([kw (string-trim (car parts))]
+                         [text (string-trim (string-join (cdr parts) " "))]
+                         [preview
+                          (let ([one-line (string-replace text "\n" " ")])
+                            (if (> (string-length one-line) 80)
+                                (string-append (substring one-line 0 80) "…")
+                                one-line))])
+                    (list
+                     (result "snippet.save"
+                             (format "Create snippet: ~a" kw)
+                             (format "↵ saves · ~a" preview)
+                             "Snippet"
+                             (string-append kw "\u001F" text)
+                             "snippet" "" "Create"
+                             (string-append "add snippet " kw)
                              120)))))
             '()))
       (lambda (query) '())))
@@ -503,12 +549,16 @@
                  (action-row "copy" "Copy path" "Copy"
                              (application-path app)))
            '())]
-      [(string=? id "clip.copy")
-       (list (action-row "clip.pin"
+      ;; ↵ on a clipboard row already pastes; the panel keeps Copy for the
+      ;; times the frontmost app is not where the text belongs.
+      [(string=? id "clip.paste")
+       (list (action-row "clip.copy" "Copy" "Copy" arg)
+             (action-row "clip.pin"
                          (clipboard-pin-label engine arg) "Pin" arg)
              (action-row "clip.delete" "Delete entry" "Delete" arg))]
       [(string=? id "snip.copy")
-       (list (action-row "snip.delete" "Delete snippet" "Delete" arg))]
+       (list (action-row "snip.paste" "Paste to frontmost" "Paste" arg)
+             (action-row "snip.delete" "Delete snippet" "Delete" arg))]
       [(string=? id "link.open")
        (list (action-row "copy" "Copy URL" "Copy" arg))]
       [(string=? id "file.open")
@@ -564,6 +614,7 @@
    ((snippets-provider engine) query)
    ((quicklinks-provider engine) query)
    ((add-link-provider engine) query)
+   ((add-snippet-provider engine) query)
    ((web-provider engine) query)
    ((system-provider engine) query)
    ((plugins-provider engine) query)
@@ -594,10 +645,25 @@
       (cons "copied" (list (cons 'copy-to-clipboard (clipboard-item-text item))))
       (cons (format "clipboard item not found: ~a" id) '())))
 
+;; Paste-to-frontmost: the host receives the text, writes the pasteboard,
+;; hides the panel, and synthesizes the platform paste keystroke into the
+;; app the user came from.
+(define (clip-paste-event! engine id)
+  (define item (clipboard-item-ref (engine-clipboard engine) id))
+  (if item
+      (cons "copied" (list (cons 'paste-to-frontmost (clipboard-item-text item))))
+      (cons (format "clipboard item not found: ~a" id) '())))
+
 (define (snip-copy-event! engine id)
   (define s (snippet-ref (engine-snippets engine) id))
   (if s
       (cons "copied" (list (cons 'copy-to-clipboard (snippet-text s))))
+      (cons (format "snippet not found: ~a" id) '())))
+
+(define (snip-paste-event! engine id)
+  (define s (snippet-ref (engine-snippets engine) id))
+  (if s
+      (cons "copied" (list (cons 'paste-to-frontmost (snippet-text s))))
       (cons (format "snippet not found: ~a" id) '())))
 
 (define (app-launch! engine id)
@@ -675,6 +741,7 @@
      (finish (cons "copied" (list (cons 'copy-to-clipboard arg))))]
     [(string=? id "copy")
      (finish (cons "copied" (list (cons 'copy-to-clipboard arg))))]
+    [(string=? id "clip.paste") (finish (clip-paste-event! engine arg))]
     [(string=? id "clip.copy") (finish (clip-copy-event! engine arg))]
     [(string=? id "clip.pin")
      (finish
@@ -695,6 +762,18 @@
           (cons "ok" (list (cons 'notify "Snippet deleted")))
           (cons (format "snippet not found: ~a" arg) '())))]
     [(string=? id "snip.copy") (finish (snip-copy-event! engine arg))]
+    [(string=? id "snip.paste") (finish (snip-paste-event! engine arg))]
+    [(string=? id "snippet.save")
+     (finish
+      (let ([parts (string-split arg link-save-separator)])
+        (if (and (engine-snippets engine) (= (length parts) 2))
+            (let ([s (snippet-save! (engine-snippets engine)
+                                    (car parts)        ; name = keyword
+                                    (cadr parts)       ; text
+                                    (car parts))])     ; keyword claim
+              (cons "ok" (list (cons 'notify
+                                     (format "Snippet saved: ~a" (snippet-name s))))))
+            (cons "invalid snippet payload" '()))))]
     [(string=? id "link.open") (finish (link-open! engine arg))]
     [(string=? id "link.save") (finish (link-save!-from-payload engine arg))]
     [(string=? id "link.delete") (finish (link-delete!-action engine arg))]

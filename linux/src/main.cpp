@@ -14,7 +14,9 @@
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <X11/keysym.h>
+#include <X11/extensions/XTest.h>
 
 #include <algorithm>
 #include <atomic>
@@ -73,6 +75,122 @@ struct HotkeyGrab {
 };
 
 HotkeyGrab hotkey_grab;
+
+// The launcher hotkey as (X11 modifier mask, keysym). The grammar is one
+// spec shared with the backend (settings.rkt) and the other hosts:
+// modifiers alt/ctrl/shift/cmd/win/super, then space | a-z | 0-9 |
+// f1-f12 | comma | period | minus | equal | tab.
+struct HotkeySpec {
+  unsigned int mods{Mod1Mask};
+  KeySym keysym{XK_space};
+};
+
+HotkeySpec current_hotkey;
+KeyCode current_hotkey_code{0};
+
+bool parse_hotkey(std::string const& spec, HotkeySpec& out) {
+  unsigned int mods = 0;
+  bool has_key = false;
+  std::string key;
+  std::string lowered = spec;
+  std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  std::size_t start = 0;
+  while (start <= lowered.size()) {
+    std::size_t plus = lowered.find('+', start);
+    std::string token = lowered.substr(
+        start, plus == std::string::npos ? std::string::npos : plus - start);
+    if (token.empty()) {
+      return false;
+    }
+    if (token == "alt" || token == "option") {
+      mods |= Mod1Mask;
+    } else if (token == "ctrl" || token == "control") {
+      mods |= ControlMask;
+    } else if (token == "shift") {
+      mods |= ShiftMask;
+    } else if (token == "cmd" || token == "win" || token == "super") {
+      mods |= Mod4Mask;
+    } else if (!has_key) {
+      has_key = true;
+      key = token;
+    } else {
+      return false;
+    }
+    if (plus == std::string::npos) {
+      break;
+    }
+    start = plus + 1;
+  }
+  if (!has_key || mods == 0) {
+    return false;
+  }
+  KeySym sym = NoSymbol;
+  if (key == "space") {
+    sym = XK_space;
+  } else if (key == "tab") {
+    sym = XK_Tab;
+  } else if (key == "comma") {
+    sym = XK_comma;
+  } else if (key == "period") {
+    sym = XK_period;
+  } else if (key == "minus") {
+    sym = XK_minus;
+  } else if (key == "equal") {
+    sym = XK_equal;
+  } else if (key.size() == 1 && key[0] >= 'a' && key[0] <= 'z') {
+    sym = XK_a + static_cast<KeySym>(key[0] - 'a');
+  } else if (key.size() == 1 && key[0] >= '0' && key[0] <= '9') {
+    sym = XK_0 + static_cast<KeySym>(key[0] - '0');
+  } else if (key.size() >= 2 && key[0] == 'f' &&
+             key.find_first_not_of("0123456789", 1) == std::string::npos) {
+    int n = std::atoi(key.c_str() + 1);
+    if (n < 1 || n > 12) {
+      return false;
+    }
+    sym = XK_F1 + static_cast<KeySym>(n - 1);
+  } else {
+    return false;
+  }
+  out.mods = mods;
+  out.keysym = sym;
+  return true;
+}
+
+// Rebinds the X11 grab to `spec`. Returns a human-readable note on failure
+// ("" on success). A spec that does not parse is ignored quietly: the
+// previous binding stays and the hotkey never becomes unreachable.
+std::string apply_x11_hotkey(std::string const& spec) {
+  Display* dpy = hotkey_grab.display;
+  if (dpy == nullptr || hotkey_grab.window == None) {
+    return "";
+  }
+  HotkeySpec parsed;
+  if (!parse_hotkey(spec, parsed)) {
+    return "";
+  }
+  if (current_hotkey_code != 0) {
+    XUngrabKey(dpy, current_hotkey_code, current_hotkey.mods,
+               hotkey_grab.window);
+    XUngrabKey(dpy, current_hotkey_code, current_hotkey.mods | Mod2Mask,
+               hotkey_grab.window);
+    current_hotkey_code = 0;
+  }
+  KeyCode code = XKeysymToKeycode(dpy, parsed.keysym);
+  if (code == 0) {
+    return "X11 hotkey setup failed: cannot resolve the key keycode.";
+  }
+  XGrabKey(dpy, code, parsed.mods, hotkey_grab.window, True, GrabModeAsync,
+           GrabModeAsync);
+  XGrabKey(dpy, code, parsed.mods | Mod2Mask, hotkey_grab.window, True,
+           GrabModeAsync, GrabModeAsync);  // with NumLock
+  current_hotkey = parsed;
+  current_hotkey_code = code;
+  XSelectInput(dpy, hotkey_grab.window, KeyPressMask);
+  return "";
+}
 
 // ---- native window management (win.* actions) -----------------------------
 //
@@ -219,6 +337,10 @@ struct Launcher {
   GtkSearchEntry* search{nullptr};
   GtkListBox* results{nullptr};
   GtkLabel* status{nullptr};
+  // Live AI answer panel (hidden until the backend pushes ai-stream).
+  GtkWidget* ai_panel{nullptr};
+  GtkLabel* ai_phase{nullptr};
+  GtkLabel* ai_text{nullptr};
 
   std::unique_ptr<rivet::linux_runtime::Backend> backend;
   std::unique_ptr<rivet_app::API> api;
@@ -229,6 +351,10 @@ struct Launcher {
   std::atomic<int> search_generation{0};
   // Re-entry guard for the download-progress poller (updater 0.2).
   std::atomic<bool> update_polling{false};
+  // Clipboard-history capture: the GTK host has no change notification, so
+  // a 1s poll (same cadence as the macOS pasteboard timer) diffs the
+  // clipboard text and records new values backend-side.
+  std::string last_clipboard_text;
 
   // Official scaffold startup handoff: the boot thread publishes either a
   // started backend or an error; the main loop adopts it exactly once.
@@ -258,6 +384,119 @@ struct Launcher {
       Launcher::instance().set_status(*text);
       return G_SOURCE_REMOVE;
     }, new std::string(std::move(message)));
+  }
+
+  // ---- backend-rendered settings -------------------------------------------
+
+  // The theme setting is backend-owned; GTK can only ask for the dark
+  // variant explicitly — light/system fall back to the user's GTK theme.
+  static void apply_theme(std::string const& theme) {
+    GtkSettings* settings = gtk_settings_get_default();
+    if (settings == nullptr) {
+      return;
+    }
+    g_object_set(settings, "gtk-application-prefer-dark-theme",
+                 theme == "dark" ? TRUE : FALSE, nullptr);
+  }
+
+  void apply_ai_stream(rivet_app::AiStream const& stream) {
+    if (stream.phase == "idle") {
+      dismiss_ai_panel();
+      return;
+    }
+    gtk_widget_set_visible(ai_panel, TRUE);
+    gtk_label_set_text(ai_text, stream.text.c_str());
+    if (stream.phase == "running") {
+      gtk_label_set_text(ai_phase, "AI is answering…");
+    } else if (stream.phase == "error") {
+      gtk_label_set_text(ai_phase, "AI request failed");
+    } else {
+      gtk_label_set_text(ai_phase, "AI answer");
+    }
+  }
+
+  void dismiss_ai_panel() { gtk_widget_set_visible(ai_panel, FALSE); }
+
+  // One-time read of the backend-owned settings the host renders (hotkey,
+  // theme). The backend pushes changes afterwards via the reserved $state
+  // events; this seeds the initial values.
+  void pull_host_settings() {
+    if (api == nullptr) {
+      return;
+    }
+    auto* api_raw = api.get();
+    std::thread([api_raw]() mutable {
+      std::string hotkey;
+      std::string theme;
+      try {
+        hotkey = api_raw->get_hotkey().get();
+      } catch (...) {
+      }
+      try {
+        theme = api_raw->get_theme().get();
+      } catch (...) {
+      }
+      g_idle_add([](gpointer user_data) -> int {
+        std::unique_ptr<std::pair<std::string, std::string>> values(
+            static_cast<std::pair<std::string, std::string>*>(user_data));
+        Launcher& launcher = Launcher::instance();
+        if (!values->first.empty()) {
+          std::string note = apply_x11_hotkey(values->first);
+          if (!note.empty()) {
+            launcher.set_status(note);
+          }
+        }
+        if (!values->second.empty()) {
+          apply_theme(values->second);
+        }
+        return G_SOURCE_REMOVE;
+      }, new std::pair<std::string, std::string>(hotkey, theme));
+    }).detach();
+  }
+
+  // ---- clipboard history capture --------------------------------------------
+
+  static void on_clipboard_read(GObject* source, GAsyncResult* result,
+                                gpointer) {
+    Launcher& launcher = Launcher::instance();
+    gchar* text =
+        gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source), result, nullptr);
+    if (text == nullptr) {
+      return;
+    }
+    if (text != launcher.last_clipboard_text) {
+      launcher.last_clipboard_text = text;
+      std::string payload = text;
+      std::thread([payload]() mutable {
+        Launcher& launcher = Launcher::instance();
+        if (launcher.shutting_down.load(std::memory_order_acquire)) {
+          return;
+        }
+        auto* api_raw = launcher.api.get();
+        if (api_raw == nullptr) {
+          return;
+        }
+        try {
+          api_raw->clipboard_record(payload);
+        } catch (...) {
+          // Persistence must never take the launcher down.
+        }
+      }).detach();
+    }
+    g_free(text);
+  }
+
+  static gboolean poll_clipboard(gpointer) {
+    Launcher& launcher = Launcher::instance();
+    if (launcher.api == nullptr ||
+        launcher.shutting_down.load(std::memory_order_acquire)) {
+      return G_SOURCE_CONTINUE;
+    }
+    GdkClipboard* clipboard =
+        gtk_widget_get_clipboard(GTK_WIDGET(launcher.window));
+    gdk_clipboard_read_text_async(clipboard, nullptr, on_clipboard_read,
+                                  nullptr);
+    return G_SOURCE_CONTINUE;
   }
 
   // Updater 0.2 (in-app install stays macOS-only on this line): the 4-hour
@@ -330,6 +569,93 @@ struct Launcher {
     return {};
   }
 
+  // Paste-to-frontmost: the clipboard already carries the text (set on the
+  // main thread in handle_event); after the panel hides and focus returns
+  // to the previous app, synthesize Ctrl+V — XTEST on X11, `wtype` on
+  // Wayland. GDK is main-thread-only, so the X11 check happens on the main
+  // thread and this worker touches only Xlib (XInitThreads ran at startup)
+  // or spawns a process.
+  static void paste_keystroke_async(bool x11_session) {
+    std::thread([x11_session]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(180));
+      if (x11_session) {
+        Display* dpy = XOpenDisplay(nullptr);
+        if (dpy != nullptr) {
+          KeyCode ctrl = XKeysymToKeycode(dpy, XK_Control_L);
+          KeyCode v = XKeysymToKeycode(dpy, XK_v);
+          if (ctrl != 0 && v != 0) {
+            XTestFakeKeyEvent(dpy, ctrl, True, CurrentTime);
+            XTestFakeKeyEvent(dpy, v, True, CurrentTime);
+            XTestFakeKeyEvent(dpy, v, False, CurrentTime);
+            XTestFakeKeyEvent(dpy, ctrl, False, CurrentTime);
+            XFlush(dpy);
+          }
+          XCloseDisplay(dpy);
+          return;
+        }
+      }
+      GError* error = nullptr;
+      if (!g_spawn_command_line_async("wtype -M ctrl -P v -p v -m ctrl",
+                                      &error)) {
+        Launcher::post_status(
+            "Paste-to-frontmost on Wayland needs `wtype` (install it), or "
+            "run Fulcrum in an X11 session.");
+        if (error != nullptr) {
+          g_error_free(error);
+        }
+      }
+    }).detach();
+  }
+
+  void handle_state_push(rivet::Value const& value) {
+    // Reserved "$state" frames carry [state-name, wire-value].
+    auto const* fields = std::get_if<rivet::Value::List>(&value.data);
+    if (fields == nullptr || fields->size() != 2) {
+      return;
+    }
+    auto const* state_name = std::get_if<std::string>(&(fields->at(0).data));
+    if (state_name == nullptr) {
+      return;
+    }
+    if (*state_name == "ai-stream") {
+      rivet_app::AiStream stream;
+      try {
+        stream = rivet_app::decode_AiStream(fields->at(1));
+      } catch (...) {
+        return;
+      }
+      g_idle_add([](gpointer user_data) -> int {
+        std::unique_ptr<rivet_app::AiStream> stream(
+            static_cast<rivet_app::AiStream*>(user_data));
+        Launcher::instance().apply_ai_stream(*stream);
+        return G_SOURCE_REMOVE;
+      }, new rivet_app::AiStream(std::move(stream)));
+    } else if (*state_name == "theme") {
+      if (auto const* theme = std::get_if<std::string>(&(fields->at(1).data))) {
+        std::string value_copy = *theme;
+        g_idle_add([](gpointer user_data) -> int {
+          std::unique_ptr<std::string> theme(
+              static_cast<std::string*>(user_data));
+          apply_theme(*theme);
+          return G_SOURCE_REMOVE;
+        }, new std::string(std::move(value_copy)));
+      }
+    } else if (*state_name == "hotkey") {
+      if (auto const* spec = std::get_if<std::string>(&(fields->at(1).data))) {
+        std::string spec_copy = *spec;
+        g_idle_add([](gpointer user_data) -> int {
+          std::unique_ptr<std::string> spec(
+              static_cast<std::string*>(user_data));
+          std::string note = apply_x11_hotkey(*spec);
+          if (!note.empty()) {
+            Launcher::instance().set_status(note);
+          }
+          return G_SOURCE_REMOVE;
+        }, new std::string(std::move(spec_copy)));
+      }
+    }
+  }
+
   void handle_event(std::string const& name, std::string const& payload) {
     if (name == "copy-to-clipboard") {
       if (GdkClipboard* clipboard =
@@ -337,6 +663,23 @@ struct Launcher {
         gdk_clipboard_set_text(clipboard, payload.c_str());
       }
       hide();
+    } else if (name == "paste-to-frontmost") {
+      if (GdkClipboard* clipboard =
+              gtk_widget_get_clipboard(GTK_WIDGET(window))) {
+        gdk_clipboard_set_text(clipboard, payload.c_str());
+      }
+      hide();
+      bool const x11_session =
+          GDK_IS_X11_DISPLAY(gdk_display_get_default());
+      paste_keystroke_async(x11_session);
+    } else if (name == "ai-finished") {
+      // The answer lands on the clipboard, but the panel stays: the user
+      // is reading the streamed text right now.
+      if (GdkClipboard* clipboard =
+              gtk_widget_get_clipboard(GTK_WIDGET(window))) {
+        gdk_clipboard_set_text(clipboard, payload.c_str());
+      }
+      set_status("Answer copied to the clipboard");
     } else if (name == "open-url") {
       gtk_show_uri(GTK_WINDOW(window), payload.c_str(), GDK_CURRENT_TIME);
       hide();
@@ -500,6 +843,7 @@ struct Launcher {
                          boxed->status == "launched" ||
                          boxed->status == "copied" ||
                          boxed->status == "opened" ||
+                         boxed->status == "started" ||
                          boxed->status == "downloading" ||
                          boxed->status == "delegated";
       } catch (std::exception const& e) {
@@ -517,6 +861,12 @@ struct Launcher {
                   "Window command failed (X11/Wayland window manager refused).");
               return G_SOURCE_REMOVE;
             }
+          }
+          if (job->status == "started") {
+            // AI run: the request continues on a backend thread; the
+            // ai-stream State drives the streaming panel.
+            Launcher::instance().set_status("AI is answering…");
+            return G_SOURCE_REMOVE;
           }
           if (job->status == "downloading") {
             // The backend download thread owns the transfer; the host
@@ -542,6 +892,7 @@ struct Launcher {
 
   void show() {
     actions_mode = false;
+    dismiss_ai_panel();
     gtk_editable_set_text(GTK_EDITABLE(search), "");
     run_search("");
     gtk_widget_set_visible(GTK_WIDGET(window), TRUE);
@@ -637,6 +988,20 @@ struct Launcher {
 
     backend_->set_event_handler(
         [](std::string const& name, rivet::Value const& value) {
+          if (name == "$state") {
+            // Reserved state pushes need the raw list payload; decode on
+            // the main loop (handle_state_push marshals internally).
+            auto* job = new std::pair<std::string, rivet::Value>(
+                name, value);
+            g_idle_add([](gpointer user_data) -> int {
+              std::unique_ptr<std::pair<std::string, rivet::Value>> frame(
+                  static_cast<std::pair<std::string, rivet::Value>*>(
+                      user_data));
+              Launcher::instance().handle_state_push(frame->second);
+              return G_SOURCE_REMOVE;
+            }, job);
+            return;
+          }
           auto* job = new std::pair<std::string, std::string>(
               name, event_payload(value));
           g_idle_add([](gpointer user_data) -> int {
@@ -650,6 +1015,8 @@ struct Launcher {
     set_status("Ready — hotkey or `fulcrum --toggle`");
     run_search("");
     start_silent_update_check();
+    pull_host_settings();
+    g_timeout_add(1000, poll_clipboard, nullptr);
   }
 
   void stop_backend() {
@@ -683,22 +1050,18 @@ std::string install_x11_hotkey(GdkDisplay* display, GtkWindow* window) {
     return "Wayland session: compositors do not allow global key grabs. "
            "Bind `fulcrum --toggle` to a key in your compositor settings.";
   }
-  hotkey_grab.display = gdk_x11_display_get_xdisplay(display);
+  hotkey_grab.display = gdk_x11_display_get_xdisplay(GDK_X11_DISPLAY(display));
   hotkey_grab.window =
       gdk_x11_surface_get_xid(gtk_native_get_surface(GTK_NATIVE(window)));
-  Display* dpy = hotkey_grab.display;
 
-  KeyCode code = XKeysymToKeycode(dpy, XK_space);
-  if (code == 0) {
-    return "X11 hotkey setup failed: cannot resolve the Space keycode.";
+  // Bootstrap grab so the launcher is reachable before the backend
+  // answers; the stored hotkey spec re-binds once the state arrives.
+  std::string note = apply_x11_hotkey("alt+space");
+  if (!note.empty()) {
+    return note;
   }
-  XGrabKey(dpy, code, Mod1Mask, hotkey_grab.window, True, GrabModeAsync,
-           GrabModeAsync);
-  XGrabKey(dpy, code, Mod1Mask | Mod2Mask, hotkey_grab.window, True,
-           GrabModeAsync, GrabModeAsync);  // with NumLock
-  XSelectInput(dpy, hotkey_grab.window, KeyPressMask);
 
-  int x11_fd = ConnectionNumber(dpy);
+  int x11_fd = ConnectionNumber(hotkey_grab.display);
   GIOChannel* channel = g_io_channel_unix_new(x11_fd);
   g_io_add_watch(channel, G_IO_IN, on_x11_hotkey, nullptr);
   g_io_channel_unref(channel);
@@ -753,6 +1116,11 @@ gboolean on_key_pressed(GtkEventControllerKey*, guint keyval, guint,
       // Inside the action panel: back to the search rows first.
       if (Launcher::instance().actions_mode) {
         Launcher::instance().close_actions();
+        return TRUE;
+      }
+      // A finished AI answer dismisses before anything else.
+      if (gtk_widget_get_visible(Launcher::instance().ai_panel)) {
+        Launcher::instance().dismiss_ai_panel();
         return TRUE;
       }
       // Alfred/Raycast convention: clear the query first, hide only when
@@ -829,6 +1197,37 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_widget_set_margin_top(status, 6);
   launcher.status = GTK_LABEL(status);
 
+  // Live AI answer panel: hidden until the backend pushes the ai-stream
+  // state, then shows the growing answer (GTK propagates the natural
+  // height so short answers never reserve dead space).
+  auto* ai_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  gtk_widget_set_visible(ai_panel, FALSE);
+  gtk_widget_set_margin_start(ai_panel, 12);
+  gtk_widget_set_margin_end(ai_panel, 12);
+  gtk_widget_set_margin_top(ai_panel, 4);
+  auto* ai_phase = gtk_label_new("AI is answering…");
+  gtk_label_set_xalign(GTK_LABEL(ai_phase), 0.0);
+  gtk_widget_add_css_class(ai_phase, "caption");
+  gtk_widget_add_css_class(ai_phase, "dim-label");
+  auto* ai_scroll = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(ai_scroll),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_max_content_height(
+      GTK_SCROLLED_WINDOW(ai_scroll), 170);
+  gtk_scrolled_window_set_propagate_natural_height(
+      GTK_SCROLLED_WINDOW(ai_scroll), TRUE);
+  auto* ai_text = gtk_label_new("");
+  gtk_label_set_wrap(GTK_LABEL(ai_text), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(ai_text), 0.0);
+  gtk_label_set_selectable(GTK_LABEL(ai_text), TRUE);
+  gtk_widget_add_css_class(ai_text, "monospace");
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(ai_scroll), ai_text);
+  gtk_box_append(GTK_BOX(ai_panel), ai_phase);
+  gtk_box_append(GTK_BOX(ai_panel), ai_scroll);
+  launcher.ai_panel = ai_panel;
+  launcher.ai_phase = GTK_LABEL(ai_phase);
+  launcher.ai_text = GTK_LABEL(ai_text);
+
   auto* scrolled = gtk_scrolled_window_new();
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -848,6 +1247,7 @@ void on_activate(GtkApplication* app, gpointer) {
 
   gtk_box_append(GTK_BOX(root), search);
   gtk_box_append(GTK_BOX(root), status);
+  gtk_box_append(GTK_BOX(root), ai_panel);
   gtk_box_append(GTK_BOX(root), scrolled);
   gtk_box_append(GTK_BOX(root), hint);
   gtk_window_set_child(launcher.window, root);

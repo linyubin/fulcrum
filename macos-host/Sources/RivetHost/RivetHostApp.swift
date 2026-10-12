@@ -25,6 +25,7 @@ struct FulcrumApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: NSPanel?
     private var hotkeyRef: EventHotKeyRef?
+    private var activeHotkeySpec: String?
     private var eventHandler: EventHandlerRef?
     private var clipboardTimer: Timer?
     private var keyMonitor: Any?
@@ -60,7 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.backendReady()
         }
         installPanel(model: launcherModel)
-        installHotkey()
+        installHotkeyHandler()
+        applyHotkey("alt+space")
         installKeyMonitor()
         installMenuBar(model: launcherModel)
         installClipboardWatcher(model: launcherModel)
@@ -73,18 +75,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: backend readiness
 
-    /// The embedded backend answered health: read the language setting into
-    /// i18n and arm the throttled silent update check (the throttle itself
-    /// lives backend-side, so this is one cheap RPC the backend may decline).
+    /// The embedded backend answered health: read the host-rendered
+    /// settings (hotkey, theme, language) into the app and arm the
+    /// throttled silent update check (the throttle itself lives
+    /// backend-side, so this is one cheap RPC the backend may decline).
     private func backendReady() {
         guard let model else { return }
         Task { [weak self] in
-            if let api = model.api,
-               let rows = try? await api.settingsList(),
-               let language = rows.first(where: { $0.id == "language" }) {
-                I18nService.shared.setLanguage(language.badge)
+            if let api = model.api {
+                if let spec = try? await api.getHotkey() {
+                    self?.applyHotkey(spec)
+                }
+                if let theme = try? await api.getTheme() {
+                    Self.applyTheme(theme)
+                }
+                if let rows = try? await api.settingsList(),
+                   let language = rows.first(where: { $0.id == "language" }) {
+                    I18nService.shared.setLanguage(language.badge)
+                }
             }
             self?.updateController?.silentStartupCheck()
+        }
+    }
+
+    // MARK: theme
+
+    /// The theme setting is backend-owned (settings-as-rows); the host
+    /// consumes it as the app-wide NSAppearance, which the panel vibrancy
+    /// follows.
+    @MainActor
+    static func applyTheme(_ value: String) {
+        switch value {
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp.appearance = nil
         }
     }
 
@@ -170,6 +194,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showPanel() {
         guard let panel else { return }
+        // Paste-to-frontmost hides the whole app so the keystroke lands in
+        // the previous one; summoning again brings it back.
+        if NSApp.isHidden {
+            NSApp.unhide(nil)
+        }
         centerOnActiveScreen(panel)
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -182,10 +211,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: global hotkey
 
-    private func installHotkey() {
-        // Alt+Space (Option-Space) first; Ctrl+Alt+Space as the honest
-        // fallback when Option-Space is taken (some keyboard layouts bind it
-        // to character input).
+    /// Installs the Carbon event handler once (it cannot capture context
+    /// and hops to the main actor through AppDelegate.shared).
+    private func installHotkeyHandler() {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                       eventKind: UInt32(kEventHotKeyPressed))
         let status = InstallEventHandler(GetApplicationEventTarget(),
@@ -200,23 +228,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model?.setPersistentStatus("Fulcrum could not install its global hotkey handler (OSStatus \(status)).")
             return
         }
+    }
 
-        if !registerHotkey(keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey)) {
-            if registerHotkey(keyCode: UInt32(kVK_Space),
-                              modifiers: UInt32(controlKey | optionKey)) {
-                model?.setPersistentStatus("Fulcrum is ready — press ⌃⌥Space anywhere (⌥Space was taken).")
-            } else {
-                model?.setPersistentStatus("Both ⌥Space and ⌃⌥Space are taken by other tools. Release one and restart Fulcrum.")
+    /// Binds the launcher hotkey from the settings spec ("alt+space", …).
+    /// Runs at launch with the default and again whenever the backend
+    /// pushes the hotkey State (startup pull or a settings change). A spec
+    /// that does not parse or a taken combo falls back to Ctrl+Alt+Space
+    /// with a status note — the launcher must never end up unreachable.
+    func applyHotkey(_ spec: String) {
+        if let previous = hotkeyRef {
+            UnregisterEventHotKey(previous)
+            hotkeyRef = nil
+        }
+        if let binding = Hotkey.parse(spec),
+           registerHotkey(keyCode: binding.keyCode, modifiers: binding.modifiers) {
+            activeHotkeySpec = spec
+        } else if registerHotkey(keyCode: UInt32(kVK_Space),
+                                 modifiers: UInt32(controlKey | optionKey)) {
+            activeHotkeySpec = "ctrl+alt+space"
+            if spec != "ctrl+alt+space" {
+                model?.setPersistentStatus(
+                    "Fulcrum is ready — \(Hotkey.display(spec)) was taken, using ⌃⌥Space.")
+                return
             }
+        } else {
+            model?.setPersistentStatus(
+                "The hotkeys Fulcrum tried are taken by other tools. Change it in settings → hotkey, or release the combo and restart Fulcrum.")
+            return
+        }
+        if model?.ready == true {
+            model?.setPersistentStatus(
+                "Ready — press \(Hotkey.display(activeHotkeySpec ?? spec)) anywhere")
         }
     }
 
     private func registerHotkey(keyCode: UInt32, modifiers: UInt32) -> Bool {
         let hotKeyID = EventHotKeyID(signature: OSType(0x46454C43) /* FULC */,
                                      id: 1)
+        var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
                                          GetApplicationEventTarget(), 0,
-                                         &hotkeyRef)
+                                         &ref)
+        if status == noErr {
+            hotkeyRef = ref
+        }
         return status == noErr
     }
 
@@ -240,6 +295,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               // In the ⌘K panel: back to the search rows.
               if self.model?.showingActions == true {
                   self.model?.closeActions()
+              } else if self.model?.aiStream != nil {
+                  // A finished AI answer dismisses first; the launcher
+                  // stays for the next query.
+                  self.model?.dismissAiStream()
               } else if self.model?.query.isEmpty == true {
                   // Alfred/Raycast convention: clear the query first,
                   // hide only when it is already empty — a stray Esc
@@ -268,7 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.install(
             title: "Fulcrum",
             menuItems: [
-                ("Open Fulcrum ⌥Space", "open", { [weak self] in
+                ("Open Fulcrum", "open", { [weak self] in
                     self?.showPanel()
                 }),
                 ("Check for Updates…", "update", { [weak self] in

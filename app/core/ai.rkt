@@ -31,6 +31,8 @@
          build-ai-prompt
          parse-ai-response
          ai-request
+         ai-request-streaming
+         stream-line->delta
          ai-history-append
          ai-configured-status)
 
@@ -257,6 +259,192 @@
   (for/first ([i (in-range (string-length s))]
               #:when (char=? (string-ref s i) ch))
     i))
+
+;; ---- streaming ------------------------------------------------------------
+;;
+;; The streaming request mirrors ai-request but reads the body line by
+;; line, pushing the accumulated answer through on-delta as pieces arrive.
+;; Wire shapes per provider:
+;;   * openai    — SSE, deltas at choices[0].delta.content, ends "data: [DONE]"
+;;   * anthropic — SSE, deltas at content_block_delta.delta.text, ends message_stop
+;;   * ollama    — NDJSON, one {message:{content},done} object per line
+;; A provider that ignores the stream flag answers with one JSON body; the
+;; reader detects that (no SSE/NDJSON framing) and falls back to the
+;; non-streaming parser. The whole call is bounded by timeout-ms: the read
+;; loop runs under its own custodian that the deadline tears down, so a
+;; wedged provider can never hang the caller.
+
+;; One body line → (cons piece done?). `piece` is the text to append
+;; (possibly ""), `done?` ends the stream. #f means "framing line, skip"
+;; (SSE event/id annotations, blank lines, unparseable keep-alives).
+;; Exported pure so tests cover the three providers without network.
+(define (stream-line->delta provider line)
+  (cond
+    [(string-prefix? line "data:")
+     (define payload (string-trim (substring line 5)))
+     (cond
+       [(string=? payload "[DONE]") (cons "" #t)]
+       [else
+        (with-handlers ([exn:fail? (lambda (_) (cons "" #f))])
+          (define body (string->jsexpr payload))
+          (case provider
+            [("openai")
+             (define choices (hash-ref body 'choices #f))
+             (define delta
+               (and (list? choices) (pair? choices)
+                    (hash? (car choices))
+                    (hash-ref (car choices) 'delta #f)))
+             (cons (if (hash? delta) (or (hash-ref delta 'content #f) "") "") #f)]
+            [("anthropic")
+             (case (hash-ref body 'type "")
+               [("content_block_delta")
+                (define delta (hash-ref body 'delta #f))
+                (cons (if (hash? delta) (or (hash-ref delta 'text #f) "") "") #f)]
+               [("message_stop") (cons "" #t)]
+               [else (cons "" #f)])]
+            [else (cons "" #f)]))])]
+    ;; Ollama's chat stream is bare NDJSON: every non-blank line is one
+    ;; JSON object with the next piece (openai/anthropic bodies also start
+    ;; with "{" when the stream flag was ignored — the caller routes those
+    ;; whole bodies to the non-streaming parser instead, so reaching this
+    ;; branch with a "{" line only happens for ollama).
+    [(and (string=? provider "ollama")
+          (string-prefix? line "{"))
+     (with-handlers ([exn:fail? (lambda (_) (cons "" #f))])
+       (define body (string->jsexpr line))
+       (define msg (hash-ref body 'message #f))
+       (cons (cond [(hash? msg) (or (hash-ref msg 'content #f) "")]
+                   [else (or (hash-ref body 'response #f) "")])
+             (eq? (hash-ref body 'done #f) #t)))]
+    [else #f]))
+
+;; Bodies that answered without the requested stream framing: read to EOF
+;; and parse the one JSON object like a non-streaming call.
+(define (parse-unframed-body provider lines)
+  (parse-ai-response provider (string-join (reverse lines) "\n")))
+
+(define/contract (ai-request-streaming provider base-url key model prompt
+                                       #:history [history '()]
+                                       #:on-delta [on-delta void]
+                                       #:timeout-ms [timeout-ms 45000])
+  (->* (string? string? string? string? string?)
+       (#:history (listof (cons/c string? string?))
+        #:on-delta (-> string? any/c)
+        #:timeout-ms exact-nonnegative-integer?)
+       string?)
+  (define host+prefix (split-base-url base-url))
+  (define host (car host+prefix))
+  (define prefix (cdr host+prefix))
+  (define ssl? (string-prefix? base-url "https://"))
+  (define messages
+    (append (for/list ([pair (in-list history)])
+              (hasheq 'role (car pair) 'content (cdr pair)))
+            (list (hasheq 'role "user" 'content prompt))))
+  (define path
+    (case provider
+      [("openai") (string-append prefix "/v1/chat/completions")]
+      [("anthropic") (string-append prefix "/v1/messages")]
+      [else (string-append prefix "/api/chat")]))
+  (define body
+    (case provider
+      [("openai")
+       (jsexpr->string (hasheq 'model model 'messages messages 'stream #t))]
+      [("anthropic")
+       (jsexpr->string
+        (hasheq 'model model 'max_tokens 1024 'messages messages 'stream #t))]
+      [else
+       (jsexpr->string
+        (hasheq 'model model 'messages messages 'stream #t))]))
+  (define headers
+    (case provider
+      [("openai")
+       (list "Content-Type: application/json"
+             (string-append "Authorization: Bearer " key))]
+      [("anthropic")
+       (list "Content-Type: application/json"
+             (string-append "x-api-key: " key)
+             "anthropic-version: 2023-06-01")]
+      [else (list "Content-Type: application/json")]))
+
+  (define result-ch (make-async-channel))
+  ;; The reader runs under its own custodian so the deadline below can tear
+  ;; down a wedged connection (and its thread) deterministically.
+  (define reader-cust (make-custodian))
+  (parameterize ([current-custodian reader-cust])
+    (thread
+     (lambda ()
+       (with-handlers ([exn:fail?
+                        (lambda (e)
+                          (async-channel-put
+                           result-ch
+                           (string-append "AI request failed: "
+                                          (exn-message e))))])
+         (define conn (http-conn))
+         (http-conn-open! conn host #:ssl? ssl?)
+         (let/ec abort
+           (dynamic-wind
+           void
+           (lambda ()
+             (define-values (status-line _headers in)
+               (http-conn-sendrecv! conn path
+                                    #:method "POST"
+                                    #:headers headers
+                                    #:data-utf8/bytes body))
+             (unless (regexp-match? #rx"^HTTP/1\\.1 2" status-line)
+               (async-channel-put
+                result-ch
+                (format "AI request failed (HTTP ~a)"
+                        (or (let ([m (regexp-match #rx"[0-9]{3}" status-line)])
+                              (and m (car m)))
+                            "?")))
+               (abort (void)))
+             ;; 2xx: stream pieces as they arrive. A body without the
+             ;; stream framing is the provider answering non-streaming —
+             ;; collect it whole and parse like ai-request.
+             (let loop ([acc ""]
+                        [unframed '()]
+                        [saw-framing? #f])
+               (define line (read-line in 'any))
+               (cond
+                 [(eof-object? line)
+                  (async-channel-put
+                   result-ch
+                   (if saw-framing?
+                       (string-trim acc)
+                       (parse-unframed-body provider unframed)))]
+                 [(string=? (string-trim line) "") (loop acc unframed saw-framing?)]
+                 [(string-prefix? (string-trim line) "{")
+                  ;; A leading JSON object line: non-streaming body (or an
+                  ;; ollama stream line — stream-line->delta knows).
+                  (cond
+                    [(string=? provider "ollama")
+                     (define piece (stream-line->delta provider (string-trim line)))
+                     (cond
+                       [(not piece) (loop acc unframed saw-framing?)]
+                       [(cdr piece)
+                        (async-channel-put
+                         result-ch
+                         (string-trim (string-append acc (car piece))))]
+                       [else
+                        (define next (string-append acc (car piece)))
+                        (unless (string=? (car piece) "") (on-delta next))
+                        (loop next unframed #t)])]
+                    [else (loop acc (cons line unframed) saw-framing?)])]
+                 [else
+                  (define piece (stream-line->delta provider line))
+                  (cond
+                    [(not piece) (loop acc unframed saw-framing?)]
+                    [(cdr piece)
+                     (async-channel-put
+                      result-ch (string-trim (string-append acc (car piece))))]
+                    [else
+                     (define next (string-append acc (car piece)))
+                     (unless (string=? (car piece) "") (on-delta next))
+                     (loop next unframed #t)])]))))
+           (lambda () (http-conn-close! conn)))))))
+  (define result (sync/timeout (/ timeout-ms 1000) result-ch))
+  (custodian-shutdown-all reader-cust)
+  (or result "AI request timed out"))
 
 ;; Conversation memory: append one exchange, bounded so a long chat
 ;; cannot grow the request without limit.

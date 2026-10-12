@@ -77,3 +77,13 @@
      (check-true (andmap (lambda (e) (and (non-empty-string? (settings-entry-key e))
                                           (non-empty-string? (settings-entry-description e))))
                          entries)))))
+
+(test-case "the hotkey grammar matches what the hosts can bind"
+  (for ([spec (in-list '("alt+space" "ctrl+alt+space" "ctrl+shift+space"
+                         "alt+shift+space" "cmd+k" "win+comma" "super+f12"
+                         "ctrl+alt+7" "shift+tab"))])
+    (check-true (valid-hotkey? spec) spec))
+  ;; No modifier, unknown key, junk, or a non-string all refuse.
+  (for ([spec (in-list '("space" "alt" "alt+f13" "alt+esc" "hyper+space"
+                          "alt+space+extra" "" "ctrl+SPACE" 42))])
+    (check-false (valid-hotkey? spec) (format "~a" spec))))

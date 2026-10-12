@@ -2,28 +2,31 @@
 
 一次按键，直达一切。macOS、Windows、Linux 三平台的键盘优先启动器——一个 Racket 大脑，三套第一方原生 UI，全程无 WebView。
 
-[![CI](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/Windows-WinUI_3-0078D4?logo=windows11&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-SwiftUI-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK4-F9A03C?logo=linux&logoColor=white) [![License](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE) ![Version](https://img.shields.io/badge/version-0.5.0-C15F3C)
+[![CI](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/Windows-WinUI_3-0078D4?logo=windows11&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-SwiftUI-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK4-F9A03C?logo=linux&logoColor=white) [![License](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE) ![Version](https://img.shields.io/badge/version-0.8.0-C15F3C)
 
 [English](README.md) · **中文**
+
+没用过启动器？从[用户指南](docs/user-guide.zh-CN.md)开始——它假设你从未用过这类产品。English users: [user guide](docs/user-guide.md)。
 
 ## Fulcrum 是什么？
 
 按下全局热键，一个悬浮命令面板随即出现：
 
 - **模糊搜索一切** —— 应用、剪贴板历史、片段，多字段加权排序
+- **随处粘贴** —— 剪贴板行回车直接粘贴进你来自的应用；传统复制仍在 ⌘K 里
 - **内联计算** —— 精确算术、函数、常量；↵ 复制结果
 - **剪贴板历史** —— 每次复制都记录在本机，可搜索、可置顶
-- **片段** —— 带关键词的命名文本展开
+- **片段** —— 带关键词的命名文本展开，在启动器内一行创建（`add snippet addr 南京西路 42 号`）
 - **Web 搜索 bang** —— `!g`、`!gh`、`!so`、`!w`、`!yt`、`!m`、`!d`、`!t`
 - **Quicklinks** —— 自带关键词的 URL 模板（`yt nature` 直达搜索），在启动器内一行创建
 - **窗口管理** —— 左/右半屏、最大化、近最大化、居中、还原，三平台各自原生实现
 - **文件搜索** —— `find <query>` 走 Spotlight（当前为 macOS，其他平台诚实提示）
-- **BYOK AI** —— 自带 OpenAI / Anthropic / Ollama 密钥：`ai summarize`、`ai clean`、`ai translate <lang>`、`ai explain`、`ai <question>`——答案直接进剪贴板；密钥只存本机、绝不参与同步
+- **BYOK AI（流式）** —— 自带 OpenAI / Anthropic / Ollama 密钥：`ai summarize`、`ai clean`、`ai translate <lang>`、`ai explain`、`ai chat <msg>`、`ai <question>`——答案在面板里流式生成，完成后自动进剪贴板；密钥只存本机、绝不参与同步
 - **系统命令** —— 锁屏、睡眠、重启
-- **插件** —— 任何能通过 stdio 说 JSON 的语言（[FPP1](docs/plugins.md)），附十个第一方插件，可在启动器内直接安装（查询 `gallery`）
+- **插件** —— 任何能通过 stdio 说 JSON 的语言（[FPP1](docs/plugins.md)），附十一个第一方插件，可在启动器内直接安装（查询 `gallery`）
 - **同步（beta）** —— 设置与片段镜像到任意云盘同步目录；机器数据被清空后可从镜像恢复
 
-搜索、历史、片段永远不离开你的设备。0.1 没有任何遥测。
+搜索、历史、片段永远不离开你的设备。没有任何遥测。
 
 ## 为什么还要一个启动器？
 
@@ -49,20 +52,20 @@ fulcrum/
 ├── macos-host/             # SwiftUI 悬浮面板 + Carbon 全局热键
 ├── windows/                # WinUI 3 悬浮窗 + RegisterHotKey
 ├── linux/                  # GTK4 面板 + X11 grab（Rivet 0.3 Linux preview）
-├── gallery/                # 10 个第一方 FPP1 插件（应用内可安装）
-├── tests/                  # 43 个后端测试（raco test tests/）
-├── docs/                   # plugins.md、release-runbook.md、商业计划
+├── gallery/                # 11 个第一方 FPP1 插件（应用内可安装）
+├── tests/                  # 后端测试（raco test tests/）
+├── docs/                   # user-guide.md、plugins.md、release-runbook.md
 ├── site/                   # fulcrum.jrtx.site（GitHub Pages）
 └── .github/workflows/      # CI 矩阵 + tag 驱动的发布流水线
 ```
 
-## 状态：v0.5.0（开发者预览）
+## 状态：v0.8.0（开发者预览）
 
-开发者预览。后端已完成并通过全部测试（55/55），内置十个第一方插件的 gallery（查询 `gallery` 安装）与设置/片段同步 beta（`sync-root`）。三个宿主均针对后端契约功能完备：Windows（WinUI 3）、macOS（SwiftUI）、Linux（GTK4）——Linux 宿主现已通过 [Rivet 0.3](https://github.com/turinglambdaai/rivet) 引入的官方 `raco rivet build` Linux 路径构建。`raco rivet doctor` / `dev` 是所有平台受支持的开发循环。
+开发者预览。后端已完成并通过全部测试（81 个 test case，覆盖排序、存储、插件、AI、签名更新链路），内置十一个第一方插件的 gallery（查询 `gallery` 安装）与设置/片段同步 beta（`sync-root`）。三个宿主均对齐后端契约：Windows（WinUI 3）、macOS（SwiftUI）、Linux（GTK4）——Linux 宿主通过 [Rivet 0.3](https://github.com/turinglambdaai/rivet) 引入的官方 `raco rivet build` Linux 路径构建。已知的平台边界在[用户指南](docs/user-guide.zh-CN.md#疑难排查)里如实列明：文件搜索仅限 macOS；Linux 的 Wayland 粘贴到前台需要 `wtype`。`raco rivet doctor` / `dev` 是所有平台受支持的开发循环。
 
 ## 开发
 
-依赖：[Racket CS](https://racket-lang.org/) 9.3（stable）、以包形式链接的 Rivet checkout（v0.3.0 或更高）、以及平台工具链（macOS 需要 Xcode CLT，Windows 需要 VS 2022 Build Tools，Linux 需要 `build-essential cmake pkg-config libgtk-4-dev zlib1g-dev liblz4-dev libncurses-dev`——缺什么 `raco rivet doctor` 会给出精确清单）。
+依赖：[Racket CS](https://racket-lang.org/) 9.3（stable）、以包形式链接的 Rivet checkout（v0.3.0 或更高）、以及平台工具链（macOS 需要 Xcode CLT，Windows 需要 VS 2022 Build Tools，Linux 需要 `build-essential cmake pkg-config libgtk-4-dev zlib1g-dev liblz4-dev libncurses-dev libx11-dev libxtst-dev`——缺什么 `raco rivet doctor` 会给出精确清单）。
 
 ```bash
 raco pkg install --auto --no-docs --link /path/to/rivet

@@ -72,6 +72,18 @@ struct MainWindow : MainWindowT<MainWindow> {
   void CloseActions();
   void ApplyActions(std::vector<rivet_app::ResultRow> rows);
 
+  // Host-side helpers shared by the event handler and the hotkey flow.
+  void WriteClipboardText(std::wstring const& text);
+  void PasteToFrontmost(std::wstring const& text);
+  void ApplyTheme(std::string const& theme);
+  void ApplyHotkey(std::string const& spec);
+  void DismissAiPanel();
+  void ApplyAiStream(rivet_app::AiStream const& stream);
+  // One-time read of the backend-owned settings the host renders (hotkey,
+  // theme). The backend pushes changes afterwards via the reserved $state
+  // events; this seeds the initial values.
+  void PullHostSettings();
+
  private:
   void OnClipboardUpdate();
   winrt::fire_and_forget InitializeBackendAsync();

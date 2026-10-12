@@ -24,7 +24,7 @@ find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 find_library(LZ4_LIBRARY NAMES lz4 REQUIRED)
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
-find_package(X11 REQUIRED)
+find_package(X11 REQUIRED COMPONENTS Xtst)
 if(DEFINED ENV{RIVET_RACKET_LIBRARY})
   set(RACKETCS_LIBRARY "$ENV{RIVET_RACKET_LIBRARY}")
 elseif(DEFINED ENV{RIVET_RACKET_LIB_DIR})
@@ -56,6 +56,7 @@ target_include_directories(RivetHost PRIVATE
 target_link_libraries(RivetHost PRIVATE
   PkgConfig::GTK4
   X11
+  X11::Xtst
   ${RACKETCS_LIBRARY}
   ZLIB::ZLIB
   ${LZ4_LIBRARY}

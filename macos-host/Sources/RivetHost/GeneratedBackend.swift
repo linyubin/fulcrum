@@ -7,13 +7,24 @@ public enum RivetGeneratedConfig {
     public static let moduleName = "backend"
     public static let entryName = "start"
     public static let displayName = "Fulcrum"
-    public static let version = "0.6.0"
-    public static let build: Int64 = 6
+    public static let version = "0.8.0"
+    public static let build: Int64 = 8
     public static let identifier = "site.jrtx.fulcrum"
     public static let releaseChannel = "stable"
 }
 
 public enum RivetTypes {
+    public struct AiStream: Sendable {
+        public let phase: String
+        public let text: String
+        public let error: String?
+        public init(phase: String, text: String, error: String?) {
+            self.phase = phase
+            self.text = text
+            self.error = error
+        }
+    }
+
     public struct UpdateCheck: Sendable {
         public let status: String
         public let error: String?
@@ -62,6 +73,7 @@ private func encode__Optional_String_(_ v: String?) -> RivetValue { v.map(encode
 private func encode__Optional_Int64_(_ v: Int64?) -> RivetValue { v.map(encode_Int64) ?? .null }
 private func encode_UpdateCheck(_ v: RivetTypes.UpdateCheck) -> RivetValue { .list([encode_String(v.status), encode__Optional_String_(v.error), encode_String(v.current_version), encode__Optional_String_(v.available_version), encode__Optional_Int64_(v.build), encode__Optional_String_(v.published_at), encode__Optional_String_(v.installer), encode__Optional_Int64_(v.size_bytes)]) }
 private func encode_UpdateState(_ v: RivetTypes.UpdateState) -> RivetValue { .list([encode_String(v.phase), encode_Int64(v.percent), encode__Optional_String_(v.message), encode__Optional_String_(v.downloaded_path), encode__Optional_String_(v.available_version)]) }
+private func encode_AiStream(_ v: RivetTypes.AiStream) -> RivetValue { .list([encode_String(v.phase), encode_String(v.text), encode__Optional_String_(v.error)]) }
 
 private func decode_Int64(_ v: RivetValue) throws -> Int64 { guard case .int64(let x) = v else { throw RivetGeneratedError.typeMismatch("Int64") }; return x }
 private func decode_String(_ v: RivetValue) throws -> String { guard case .string(let x) = v else { throw RivetGeneratedError.typeMismatch("String") }; return x }
@@ -73,18 +85,23 @@ private func decode__Optional_String_(_ v: RivetValue) throws -> String? { if ca
 private func decode__Optional_Int64_(_ v: RivetValue) throws -> Int64? { if case .null = v { return nil }; return try decode_Int64(v) }
 private func decode_UpdateCheck(_ v: RivetValue) throws -> RivetTypes.UpdateCheck { guard case .list(let xs) = v, xs.count == 8 else { throw RivetGeneratedError.typeMismatch("UpdateCheck") }; return RivetTypes.UpdateCheck(status: try decode_String(xs[0]), error: try decode__Optional_String_(xs[1]), current_version: try decode_String(xs[2]), available_version: try decode__Optional_String_(xs[3]), build: try decode__Optional_Int64_(xs[4]), published_at: try decode__Optional_String_(xs[5]), installer: try decode__Optional_String_(xs[6]), size_bytes: try decode__Optional_Int64_(xs[7])) }
 private func decode_UpdateState(_ v: RivetValue) throws -> RivetTypes.UpdateState { guard case .list(let xs) = v, xs.count == 5 else { throw RivetGeneratedError.typeMismatch("UpdateState") }; return RivetTypes.UpdateState(phase: try decode_String(xs[0]), percent: try decode_Int64(xs[1]), message: try decode__Optional_String_(xs[2]), downloaded_path: try decode__Optional_String_(xs[3]), available_version: try decode__Optional_String_(xs[4])) }
+private func decode_AiStream(_ v: RivetValue) throws -> RivetTypes.AiStream { guard case .list(let xs) = v, xs.count == 3 else { throw RivetGeneratedError.typeMismatch("AiStream") }; return RivetTypes.AiStream(phase: try decode_String(xs[0]), text: try decode_String(xs[1]), error: try decode__Optional_String_(xs[2])) }
 
 public enum RivetEvent: Sendable {
+    case ai_finished(String)
     case copy_to_clipboard(String)
     case notify(String)
     case open_url(String)
+    case paste_to_frontmost(String)
     case update_available(String)
 
     public static func decode(name: String, value: RivetValue) throws -> RivetEvent {
         switch name {
+        case "ai-finished": return .ai_finished(try decode_String(value))
         case "copy-to-clipboard": return .copy_to_clipboard(try decode_String(value))
         case "notify": return .notify(try decode_String(value))
         case "open-url": return .open_url(try decode_String(value))
+        case "paste-to-frontmost": return .paste_to_frontmost(try decode_String(value))
         case "update-available": return .update_available(try decode_String(value))
         default: throw RivetGeneratedError.unknownEvent(name)
         }
@@ -169,6 +186,15 @@ public struct RivetAPI: Sendable {
     }
 
     // Shared state
+    public func get_ai_stream() async throws -> RivetTypes.AiStream {
+        let result = try await client.getState("ai-stream")
+        return try decode_AiStream(result)
+    }
+    @discardableResult
+    public func set_ai_stream(_ value: RivetTypes.AiStream) async throws -> RivetTypes.AiStream {
+        let result = try await client.setState("ai-stream", value: encode_AiStream(value))
+        return try decode_AiStream(result)
+    }
     public func get_hotkey() async throws -> String {
         let result = try await client.getState("hotkey")
         return try decode_String(result)

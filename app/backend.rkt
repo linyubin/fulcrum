@@ -43,10 +43,13 @@
          ai-ask-row
          ai-copy-last-answer
          ai-effective-provider
-         current-ai-history
-         current-ai-last-answer
+         ai-history
+         ai-last-answer
+         ai-set-history!
+         ai-set-last-answer!
          plugins-disabled-ids
          plugin-detail-rows
+         row-actions-for
          run-action)
 
 ;; Staged and packaged apps carry the true version in rivet-app-info.rktd
@@ -74,6 +77,13 @@
 (define-event copy-to-clipboard : String)
 (define-event open-url : String)
 (define-event update-available : String)
+;; The host writes the pasteboard, hides the panel, and synthesizes the
+;; platform paste keystroke into the previously frontmost app.
+(define-event paste-to-frontmost : String)
+;; Streaming finished successfully: the full answer also lands here so
+;; hosts can fill the clipboard without hiding the panel (the user is
+;; reading it).
+(define-event ai-finished : String)
 
 ;; ---- update records ------------------------------------------------------
 ;;
@@ -103,6 +113,18 @@
    [downloaded-path : (Optional String)]
    [available-version : (Optional String)]))
 
+;; Live AI answer wire shape. `text` is the answer so far while running and
+;; the full answer when done; `error` is filled only for phase "error".
+(define-record AiStream
+  ([phase : String]
+   [text : String]
+   [error : (Optional String)]))
+
+;; The live answer itself: the streaming request runs on a backend thread
+;; and pushes phase running → done|error through this State; hosts render
+;; the text as it grows. phase: idle | running | done | error.
+(define-state ai-stream : AiStream (AiStream "idle" "" (void)))
+
 (define (nullable value)
   (if value value (void)))
 
@@ -126,6 +148,7 @@
   (for ([entry (in-list events)])
     (case (car entry)
       [(copy-to-clipboard) (copy-to-clipboard (cdr entry))]
+      [(paste-to-frontmost) (paste-to-frontmost (cdr entry))]
       [(open-url) (open-url (cdr entry))]
       [else (notify (format "~a" entry))])))
 
@@ -166,9 +189,13 @@
 ;; cycles or toggles the value and notifies the new one.
 
 (define managed-setting-keys
-  '(language theme max-results clipboard-enabled web-search-enabled plugins-enabled ai-provider))
+  '(language theme hotkey max-results clipboard-enabled web-search-enabled plugins-enabled ai-provider))
 
 (define max-results-cycle '(8 12 16 20 25))
+
+;; Presets the settings row cycles through — every entry passes the hotkey
+;; grammar and registers on all three platforms.
+(define hotkey-cycle '("alt+space" "ctrl+alt+space" "ctrl+shift+space" "alt+shift+space"))
 
 (define (next-setting-value key current)
   (case key
@@ -179,6 +206,10 @@
      (cond [(string=? current "system") "light"]
            [(string=? current "light") "dark"]
            [else "system"])]
+    [(hotkey)
+     (let ([pos (index-of hotkey-cycle current)])
+       (if pos (list-ref hotkey-cycle (modulo (add1 pos) (length hotkey-cycle)))
+           (car hotkey-cycle)))]
     [(max-results)
      (let* ([cycle max-results-cycle]
             [pos (index-of cycle current)])
@@ -207,6 +238,7 @@
           (case key
             [(language) "UI language · select to toggle zh ↔ en (update dialogs follow it)"]
             [(theme) "UI theme · select to cycle system → light → dark"]
+            [(hotkey) "Global hotkey · select to cycle alt+space → ctrl+alt+space → ctrl+shift+space → alt+shift+space"]
             [(max-results) "Maximum results shown · select to cycle"]
             [(ai-provider) "BYOK AI provider · select to cycle empty → openai → anthropic → ollama"]
             [else "Select to toggle"])
@@ -221,7 +253,8 @@
       (let ([next (next-setting-value sym (settings-get (settings!) sym))])
         (settings-set! (settings!) sym next)
         (case sym
-          [(theme) (state-set! theme (settings-get (settings!) 'theme))])
+          [(theme) (state-set! theme (settings-get (settings!) 'theme))]
+          [(hotkey) (state-set! hotkey (settings-get (settings!) 'hotkey))])
         (cons "ok" (list (cons 'notify (format "~a = ~a" sym next)))))
       (cons (format "unknown setting: ~a" key) '())))
 
@@ -259,13 +292,29 @@
 (define (ai-row id title subtitle arg badge)
   (list id title subtitle "AI" arg "sparkles" "" badge))
 
-;; Conversation memory and the last answer live for the backend session
-;; only — the clipboard answer is still the primary hand-off.
-(define current-ai-history (make-parameter '()))
-(define current-ai-last-answer (make-parameter ""))
+;; Conversation memory and the last answer. Module-level boxes, NOT
+;; parameters: every RVT1 request runs on its own worker thread, and a
+;; parameter written in one worker is invisible to the next (this is also
+;; why the old parameter-based chat memory never actually survived a
+;; round-trip in production, while single-threaded tests stayed green).
+;; The streaming thread and later RPCs share these; one semaphore guards
+;; the pair against a concurrent reset.
+(define ai-memory-lock (make-semaphore 1))
+(define ai-history-box (box '()))
+(define ai-last-answer-box (box ""))
+
+(define (ai-history)
+  (unbox ai-history-box))
+
+(define (ai-last-answer)
+  (unbox ai-last-answer-box))
+
+(define (ai-set-history! h) (set-box! ai-history-box h))
+
+(define (ai-set-last-answer! a) (set-box! ai-last-answer-box a))
 
 (define (ai-copy-last-answer)
-  (define answer (current-ai-last-answer))
+  (define answer (ai-last-answer))
   (if (non-empty-string? answer)
       (cons "copied" (list (cons 'copy-to-clipboard answer)))
       (cons "no AI answer yet" '())))
@@ -301,14 +350,14 @@
           [(string=? rest "")
            (if (equal? status "ready")
                (append
-                (if (non-empty-string? (current-ai-last-answer))
+                (if (non-empty-string? (ai-last-answer))
                     (list (ai-row "ai.copy"
                                   (format "Copy last answer: ~a…"
-                                          (substring (current-ai-last-answer)
+                                          (substring (ai-last-answer)
                                                      0 (min 60 (string-length
-                                                               (current-ai-last-answer)))))
+                                                               (ai-last-answer)))))
                                   "your previous AI answer"
-                                  (current-ai-last-answer) "Answer"))
+                                  (ai-last-answer) "Answer"))
                     '())
                 (list (ai-row "ai.help"
                               (format "AI ready — ~a · ~a" provider (ai-effective-model))
@@ -332,7 +381,7 @@
                [(string-prefix? lowered "explain") "Explain, with the clipboard as context"]
                [else (format "Ask AI: ~a" rest)]))
            (list (ai-row "ai.run" title
-                         (format "↵ runs on ~a · the answer copies to your clipboard"
+                         (format "↵ runs on ~a · the answer streams here and copies to your clipboard"
                                  (if (equal? status "ready")
                                      (format "~a · ~a" provider (ai-effective-model))
                                      status))
@@ -353,7 +402,7 @@
            (string-suffix? trimmed "?"))
       (list (ai-row "ai.run"
                     (format "Ask AI: ~a" trimmed)
-                    "↵ asks; the answer copies to your clipboard"
+                    "↵ asks; the answer streams here and copies to your clipboard"
                     trimmed "AI"))
       '()))
 
@@ -364,8 +413,54 @@
         (if (pair? items) (clipboard-item-text (car items)) ""))
       ""))
 
-;; The AI run action, flat on purpose: one provider call, the answer
-;; lands in the clipboard, chat mode threads the session history.
+;; The AI run action: validate, then hand the provider call to a backend
+;; thread (ai-request-streaming) and return "started" immediately — the
+;; answer streams to hosts through the ai-stream State and lands on the
+;; clipboard via ai-finished when complete. run-action therefore never
+;; blocks on a model.
+(define ai-streaming? (box #f))
+
+(define (start-ai-stream! chat? raw-arg prompt)
+  (set-box! ai-streaming? #t)
+  (state-set! ai-stream (AiStream "running" "" (void)))
+  (define provider (ai-effective-provider))
+  (define key (ai-get-key (ai-keys-path) provider))
+  (define model (ai-effective-model))
+  (define base-url (ai-effective-base-url))
+  (define history (if chat? (ai-history) '()))
+  ;; Delta pushes are State frames; throttle so a fast model cannot flood
+  ;; the wire (150 ms is well under human reading latency).
+  (define last-push (box 0.0))
+  (thread
+   (lambda ()
+     (define answer
+       (ai-request-streaming provider base-url key model prompt
+                             #:history history
+                             #:on-delta
+                             (lambda (partial)
+                               (define now (current-inexact-milliseconds))
+                               (when (> (- now (unbox last-push)) 150)
+                                 (set-box! last-push now)
+                                 (with-handlers ([exn:fail? void])
+                                   (state-set! ai-stream
+                                               (AiStream "running" partial
+                                                         (void))))))))
+     (set-box! ai-streaming? #f)
+     (cond
+       ;; Error strings from ai-request-streaming all start with "AI ".
+       [(string-prefix? answer "AI ")
+        (with-handlers ([exn:fail? void])
+          (state-set! ai-stream (AiStream "error" "" answer)))
+        (notify answer)]
+       [else
+        (ai-set-last-answer! answer)
+        (when chat?
+          (ai-set-history!
+           (ai-history-append history (string-trim (substring raw-arg 4)) answer)))
+        (with-handlers ([exn:fail? void])
+          (state-set! ai-stream (AiStream "done" answer (void))))
+        (ai-finished answer)]))))
+
 (define (ai-run! engine arg)
   (define provider (ai-effective-provider))
   (define status
@@ -378,28 +473,16 @@
             (string-prefix? arg v))
           (string=? (string-trim (ai-newest-clipboard-text engine)) ""))
      (cons "nothing on the clipboard to work on" '())]
+    [(unbox ai-streaming?)
+     (cons "AI is already answering — wait for it or ask something new later" '())]
     [else
      (define chat? (string-prefix? arg "chat"))
      (define prompt
        (if chat?
            (string-trim (substring arg 4))
            (build-ai-prompt arg (ai-newest-clipboard-text engine))))
-     (define history (if chat? (current-ai-history) '()))
-     (define answer
-       (ai-request provider (ai-effective-base-url)
-                   (ai-get-key (ai-keys-path) provider)
-                   (ai-effective-model) prompt #:history history))
-     (if (string-prefix? answer "AI ")
-         ;; Error strings from ai-request all start with "AI ".
-         (cons answer '())
-         (begin
-           (current-ai-last-answer answer)
-           (when chat?
-             (current-ai-history
-              (ai-history-append (current-ai-history)
-                                 (string-trim (substring arg 4))
-                                 answer)))
-           (cons "copied" (list (cons 'copy-to-clipboard answer)))))]))
+     (start-ai-stream! chat? arg prompt)
+     (cons "started" '())]))
 
 (define (ai-act! engine id arg)
   (case (string->symbol id)
@@ -417,9 +500,16 @@
      (cons "ok" (list (cons 'notify "ai summarize · ai clean · ai translate <lang> · ai explain · ai <question>")))]
     [(ai.run) (ai-run! engine arg)]
     [(ai.copy) (ai-copy-last-answer)]
+    [(ai.paste)
+     (define answer (ai-last-answer))
+     (if (non-empty-string? answer)
+         (cons "copied" (list (cons 'paste-to-frontmost answer)))
+         (cons "no AI answer yet" '()))]
     [(ai.reset)
-     (current-ai-history '())
-     (current-ai-last-answer "")
+     (call-with-semaphore ai-memory-lock
+       (lambda ()
+         (ai-set-history! '())
+         (ai-set-last-answer! "")))
      (cons "ok" (list (cons 'notify "AI conversation reset")))]
     [else (cons (format "unknown ai action: ~a" id) '())]))
 
@@ -649,8 +739,21 @@
 
 ;; Secondary actions for one result row — the ⌘K panel's contents, in the
 ;; same 8-column row contract as search.
+;; Plain function under the row-actions RPC so tests can drive the
+;; backend-owned panels without a live wire.
+(define (row-actions-for id arg)
+  (cond
+    ;; Backend-owned AI rows: the engine knows nothing about them. The
+    ;; last-answer row offers paste-back in addition to the primary copy.
+    [(string=? id "ai.copy")
+     (list (list "ai.paste"
+                 "Paste answer to frontmost"
+                 "types the answer into the app you were using"
+                 "AI" "" "sparkles" "" "Paste"))]
+    [else (engine-row-actions (engine!) id arg)]))
+
 (define-rpc (row-actions [id String] [arg String] : (List (List String)))
-  (engine-row-actions (engine!) id arg))
+  (row-actions-for id arg))
 
 (define-rpc (run-action [id String] [arg String] : String)
   ;; Settings, AI, plugin-center and update rows are backend-owned (the

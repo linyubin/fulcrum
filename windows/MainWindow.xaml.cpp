@@ -139,6 +139,86 @@ std::wstring result_line(rivet_app::ResultRow const& row) {
   return line;
 }
 
+// ---- hotkey grammar -------------------------------------------------------
+//
+// One spec shared with the backend (settings.rkt) and the other hosts:
+// modifiers alt/ctrl/shift/cmd/win/super, then space | a-z | 0-9 |
+// f1-f12 | comma | period | minus | equal | tab.
+
+struct HotkeyBinding {
+  UINT mods{0};
+  UINT vk{0};
+};
+
+bool parse_hotkey(std::string const& spec, HotkeyBinding& out) {
+  UINT mods = 0;
+  bool has_key = false;
+  std::string key;
+  std::string lowered = spec;
+  std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                 [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+  std::size_t start = 0;
+  while (start <= lowered.size()) {
+    std::size_t plus = lowered.find('+', start);
+    std::string token = lowered.substr(
+        start, plus == std::string::npos ? std::string::npos : plus - start);
+    if (token.empty()) {
+      return false;
+    }
+    if (token == "alt" || token == "option") {
+      mods |= MOD_ALT;
+    } else if (token == "ctrl" || token == "control") {
+      mods |= MOD_CONTROL;
+    } else if (token == "shift") {
+      mods |= MOD_SHIFT;
+    } else if (token == "cmd" || token == "win" || token == "super") {
+      mods |= MOD_WIN;
+    } else if (!has_key) {
+      has_key = true;
+      key = token;
+    } else {
+      return false;
+    }
+    if (plus == std::string::npos) {
+      break;
+    }
+    start = plus + 1;
+  }
+  if (!has_key || mods == 0) {
+    return false;
+  }
+  UINT vk = 0;
+  if (key == "space") {
+    vk = VK_SPACE;
+  } else if (key == "tab") {
+    vk = VK_TAB;
+  } else if (key == "comma") {
+    vk = VK_OEM_COMMA;
+  } else if (key == "period") {
+    vk = VK_OEM_PERIOD;
+  } else if (key == "minus") {
+    vk = VK_OEM_MINUS;
+  } else if (key == "equal") {
+    vk = VK_OEM_PLUS;
+  } else if (key.size() == 1 && key[0] >= 'a' && key[0] <= 'z') {
+    vk = 'A' + static_cast<UINT>(key[0] - 'a');
+  } else if (key.size() == 1 && key[0] >= '0' && key[0] <= '9') {
+    vk = '0' + static_cast<UINT>(key[0] - '0');
+  } else if (key.size() >= 2 && key[0] == 'f' &&
+             key.find_first_not_of("0123456789", 1) == std::string::npos) {
+    int n = std::atoi(key.c_str() + 1);
+    if (n < 1 || n > 12) {
+      return false;
+    }
+    vk = VK_F1 + static_cast<UINT>(n - 1);
+  } else {
+    return false;
+  }
+  out.mods = mods;
+  out.vk = vk;
+  return true;
+}
+
 }  // namespace
 
 MainWindow::MainWindow() {
@@ -162,6 +242,57 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
     // UI objects or OS clipboard state.
     backend->set_event_handler([dispatcher, weak](std::string const& name,
                                                   rivet::Value const& value) {
+      // Shared-state pushes arrive as reserved "$state" events carrying
+      // [state-name, wire-value]; decode on the reader thread, dispatch
+      // the effect.
+      if (name == "$state") {
+        auto const* fields = std::get_if<rivet::Value::List>(&value.data);
+        if (fields == nullptr || fields->size() != 2) {
+          return;
+        }
+        auto const* state_name =
+            std::get_if<std::string>(&(fields->at(0).data));
+        if (state_name == nullptr) {
+          return;
+        }
+        if (*state_name == "ai-stream") {
+          rivet_app::AiStream stream;
+          try {
+            stream = rivet_app::decode_AiStream(fields->at(1));
+          } catch (...) {
+            return;
+          }
+          dispatcher.TryEnqueue([weak, stream]() mutable {
+            if (auto window = weak.get()) {
+              window->ApplyAiStream(stream);
+            }
+          });
+        } else if (*state_name == "theme") {
+          if (auto const* theme = std::get_if<std::string>(&(fields->at(1).data))) {
+            std::string value_copy = *theme;
+            dispatcher.TryEnqueue([weak, value_copy]() mutable {
+              if (auto window = weak.get()) {
+                window->ApplyTheme(value_copy);
+              }
+            });
+          }
+        } else if (*state_name == "hotkey") {
+          if (auto const* spec = std::get_if<std::string>(&(fields->at(1).data))) {
+            std::string spec_copy = *spec;
+            dispatcher.TryEnqueue([weak, spec_copy]() mutable {
+              if (auto window = weak.get()) {
+                // Rebinding needs the HWND; the subclass route reads it the
+                // same way FinishNativeSetup does.
+                if (HWND hwnd = ::FindWindowW(nullptr, L"Fulcrum")) {
+                  window->ApplyHotkey(spec_copy);
+                }
+              }
+            });
+          }
+        }
+        return;
+      }
+
       // Event values are bare strings per the backend contract: RVT1 event
       // frames arrive as [name, value] and the runtime hands us value.
       std::string payload;
@@ -171,24 +302,15 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
       dispatcher.TryEnqueue([weak, name, payload]() mutable {
         if (auto window = weak.get()) {
           if (name == "copy-to-clipboard") {
-            if (::OpenClipboard(nullptr)) {
-              auto const wide = to_wide(payload);
-              auto const bytes = (wide.size() + 1) * sizeof(wchar_t);
-              if (HANDLE handle = ::GlobalAlloc(GMEM_MOVEABLE, bytes)) {
-                if (void* locked = ::GlobalLock(handle)) {
-                  memcpy(locked, wide.c_str(), bytes);
-                  ::GlobalUnlock(handle);
-                  ::EmptyClipboard();
-                  if (::SetClipboardData(CF_UNICODETEXT, handle) == nullptr) {
-                    ::GlobalFree(handle);
-                  }
-                } else {
-                  ::GlobalFree(handle);
-                }
-              }
-              ::CloseClipboard();
-            }
+            window->WriteClipboardText(to_wide(payload));
             window->HideLauncher();
+          } else if (name == "paste-to-frontmost") {
+            window->PasteToFrontmost(to_wide(payload));
+          } else if (name == "ai-finished") {
+            // The answer lands on the clipboard, but the panel stays: the
+            // user is reading the streamed text right now.
+            window->WriteClipboardText(to_wide(payload));
+            window->SetStatusOk(L"Answer copied to the clipboard");
           } else if (name == "open-url") {
             std::wstring target = to_wide(payload);
             // The backend hands out file:// URIs so every host can shell-open
@@ -214,6 +336,7 @@ winrt::fire_and_forget MainWindow::InitializeBackendAsync() {
         window->FinishNativeSetup();
         window->SearchAsync(L"");
         window->StartSilentUpdateCheck();
+        window->PullHostSettings();
       } else {
         // Never destroy the last Backend reference on its own reader thread.
         std::thread([backend = std::move(backend)]() mutable {
@@ -264,22 +387,10 @@ void MainWindow::FinishNativeSetup() {
     ::SetWindowPos(hwnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
   }
 
-  // Global hotkey: Alt+Space first, Ctrl+Alt+Space as the honest fallback
-  // when Alt+Space is taken by another tool.
-  hotkey_atom_ = 0;
-  if (!::RegisterHotKey(hwnd, kHotkeyIdPrimary,
-                        MOD_ALT | MOD_NOREPEAT, VK_SPACE)) {
-    if (::RegisterHotKey(hwnd, kHotkeyIdFallback,
-                         MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_SPACE)) {
-      hotkey_atom_ = kHotkeyIdFallback;
-      SetStatusOk(L"Ready — press Ctrl+Alt+Space anywhere");
-    } else {
-      SetStatusError(L"Both Alt+Space and Ctrl+Alt+Space are taken by other "
-                     L"tools; release one and restart Fulcrum.");
-    }
-  } else {
-    hotkey_atom_ = kHotkeyIdPrimary;
-  }
+  // Bootstrap hotkey (Alt+Space, honest fallback) so the launcher works
+  // before the backend answers; PullHostSettings re-binds from the stored
+  // spec once the hotkey state arrives.
+  ApplyHotkey("alt+space");
 
   // Window subclass for WM_HOTKEY and clipboard updates. Runs for the
   // window's lifetime; the OS reclaims the subclass with the window.
@@ -404,6 +515,7 @@ void MainWindow::OnClipboardUpdate() {
 
 void MainWindow::ShowLauncher() {
   actions_mode_ = false;
+  DismissAiPanel();
   QueryBox().Text(L"");
   SearchAsync(std::wstring(L""));
   this->Activate();
@@ -411,6 +523,151 @@ void MainWindow::ShowLauncher() {
 }
 
 void MainWindow::HideLauncher() { this->AppWindow().Hide(); }
+
+void MainWindow::WriteClipboardText(std::wstring const& text) {
+  if (!::OpenClipboard(nullptr)) {
+    return;
+  }
+  auto const bytes = (text.size() + 1) * sizeof(wchar_t);
+  if (HANDLE handle = ::GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+    if (void* locked = ::GlobalLock(handle)) {
+      memcpy(locked, text.c_str(), bytes);
+      ::GlobalUnlock(handle);
+      ::EmptyClipboard();
+      if (::SetClipboardData(CF_UNICODETEXT, handle) == nullptr) {
+        ::GlobalFree(handle);
+      }
+    } else {
+      ::GlobalFree(handle);
+    }
+  }
+  ::CloseClipboard();
+}
+
+void MainWindow::PasteToFrontmost(std::wstring const& text) {
+  WriteClipboardText(text);
+  // Hiding the overlay returns focus to the window the user came from.
+  HideLauncher();
+  std::thread([text]() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(180));
+    INPUT inputs[4]{};
+    for (auto& input : inputs) {
+      input.type = INPUT_KEYBOARD;
+    }
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[1].ki.wVk = 'V';
+    inputs[2].ki.wVk = 'V';
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    ::SendInput(4, inputs, sizeof(INPUT));
+  }).detach();
+}
+
+void MainWindow::ApplyTheme(std::string const& theme) {
+  try {
+    auto element = this->Content().try_as<
+        winrt::Microsoft::UI::Xaml::FrameworkElement>();
+    if (element == nullptr) {
+      return;
+    }
+    if (theme == "dark") {
+      element.RequestedTheme(
+          winrt::Microsoft::UI::Xaml::ElementTheme::Dark);
+    } else if (theme == "light") {
+      element.RequestedTheme(
+          winrt::Microsoft::UI::Xaml::ElementTheme::Light);
+    } else {
+      element.RequestedTheme(
+          winrt::Microsoft::UI::Xaml::ElementTheme::Default);
+    }
+  } catch (...) {
+    // Theme application must never take the launcher down.
+  }
+}
+
+void MainWindow::ApplyHotkey(std::string const& spec) {
+  HWND hwnd = ::FindWindowW(nullptr, L"Fulcrum");
+  if (hwnd == nullptr) {
+    return;
+  }
+  ::UnregisterHotKey(hwnd, kHotkeyIdPrimary);
+  ::UnregisterHotKey(hwnd, kHotkeyIdFallback);
+  hotkey_atom_ = 0;
+  HotkeyBinding binding;
+  if (parse_hotkey(spec, binding) &&
+      ::RegisterHotKey(hwnd, kHotkeyIdPrimary,
+                       binding.mods | MOD_NOREPEAT, binding.vk)) {
+    hotkey_atom_ = kHotkeyIdPrimary;
+    return;
+  }
+  // The spec did not parse or the combo is taken: the honest fallback
+  // keeps the launcher reachable.
+  if (::RegisterHotKey(hwnd, kHotkeyIdFallback,
+                       MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_SPACE)) {
+    hotkey_atom_ = kHotkeyIdFallback;
+    if (spec != "ctrl+alt+space") {
+      SetStatusOk(L"Fulcrum is ready — that hotkey was taken, using "
+                  L"Ctrl+Alt+Space. Change it in settings → hotkey.");
+    }
+  } else {
+    SetStatusError(L"The hotkeys Fulcrum tried are taken by other tools. "
+                   L"Change it in settings → hotkey, or release the combo "
+                   L"and restart Fulcrum.");
+  }
+}
+
+void MainWindow::ApplyAiStream(rivet_app::AiStream const& stream) {
+  if (stream.phase == "idle") {
+    DismissAiPanel();
+    return;
+  }
+  AiPanel().Visibility(
+      winrt::Microsoft::UI::Xaml::Visibility::Visible);
+  AiText().Text(to_wide(stream.text));
+  if (stream.phase == "running") {
+    AiPhase().Text(L"AI is answering…");
+  } else if (stream.phase == "error") {
+    AiPhase().Text(L"AI request failed");
+  } else {
+    AiPhase().Text(L"AI answer");
+  }
+}
+
+void MainWindow::DismissAiPanel() {
+  AiPanel().Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
+}
+
+void MainWindow::PullHostSettings() {
+  if (api_ == nullptr) {
+    return;
+  }
+  auto const dispatcher = DispatcherQueue();
+  auto const weak = get_weak();
+  auto* api = api_.get();
+  std::thread([weak, api, dispatcher]() mutable {
+    std::string hotkey;
+    std::string theme;
+    try {
+      hotkey = api->get_hotkey().get();
+    } catch (...) {
+    }
+    try {
+      theme = api->get_theme().get();
+    } catch (...) {
+    }
+    dispatcher.TryEnqueue([weak, hotkey, theme]() mutable {
+      if (auto window = weak.get()) {
+        if (!hotkey.empty()) {
+          window->ApplyHotkey(hotkey);
+        }
+        if (!theme.empty()) {
+          window->ApplyTheme(theme);
+        }
+      }
+    });
+  }).detach();
+}
 
 void MainWindow::QueryBox_TextChanged(
     winrt::Windows::Foundation::IInspectable const&,
@@ -447,6 +704,13 @@ void MainWindow::QueryBox_KeyDown(
       // Inside the action panel: back to the search rows first.
       if (actions_mode_) {
         CloseActions();
+        args.Handled(true);
+        break;
+      }
+      // A finished AI answer dismisses before anything else.
+      if (AiPanel().Visibility() ==
+          winrt::Microsoft::UI::Xaml::Visibility::Visible) {
+        DismissAiPanel();
         args.Handled(true);
         break;
       }
@@ -611,6 +875,10 @@ void MainWindow::RunSelected() {
             } else {
               window->HideLauncher();
             }
+          } else if (status == "started") {
+            // AI run: the request continues on a backend thread; the
+            // ai-stream State drives the streaming panel.
+            window->SetStatusOk(L"AI is answering…");
           } else if (status == "downloading") {
             // The backend download thread owns the transfer; the host
             // mirrors its progress into the status bar.

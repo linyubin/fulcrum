@@ -21,11 +21,23 @@
          settings-get
          settings-set!
          settings-list
+         valid-hotkey?
          (struct-out settings-entry))
 
 (struct settings-entry (key value description) #:transparent)
 
 (struct settings-manager (store schema) #:transparent)
+
+;; The hotkey grammar all three hosts parse: one or more modifiers
+;; (alt/ctrl/shift/cmd/win/super) then the key — space, a letter, a digit,
+;; f1-f12, or one of the named punctuation keys. This is deliberately
+;; narrower than what a recorded-shortcut UI would accept: every name here
+;; has a concrete mapping in Carbon, Win32, and X11 code.
+(define hotkey-regexp
+  #px"^(?:(alt|ctrl|shift|cmd|win|super)\\+)+(space|[a-z]|[0-9]|f(?:[1-9]|1[0-2])|comma|period|minus|equal|tab)$")
+
+(define (valid-hotkey? v)
+  (and (string? v) (regexp-match? hotkey-regexp v)))
 
 (define schema
   (hasheq
@@ -36,8 +48,8 @@
    (list (lambda (v) (member v '("system" "light" "dark"))) "system"
          "UI theme: system, light, or dark")
    'hotkey
-   (list string? "alt+space"
-         "Global hotkey that summons the launcher (applied by the host)")
+   (list valid-hotkey? "alt+space"
+         "Global hotkey that summons the launcher (applied by the host): modifiers alt/ctrl/shift/cmd/win/super + key (space, a-z, 0-9, f1-f12, comma, period, minus, equal, tab)")
    'max-results
    (list (lambda (v) (and (exact-integer? v) (>= v 5) (<= v 25))) 12
          "Maximum results shown in the list")

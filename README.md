@@ -2,28 +2,31 @@
 
 One keystroke. Everything within reach. A keyboard-first launcher for macOS, Windows, and Linux — one Racket brain, three first-party native UIs, no WebView anywhere.
 
-[![CI](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/Windows-WinUI_3-0078D4?logo=windows11&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-SwiftUI-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK4-F9A03C?logo=linux&logoColor=white) [![License](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE) ![Version](https://img.shields.io/badge/version-0.5.0-C15F3C)
+[![CI](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/Windows-WinUI_3-0078D4?logo=windows11&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-SwiftUI-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK4-F9A03C?logo=linux&logoColor=white) [![License](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE) ![Version](https://img.shields.io/badge/version-0.8.0-C15F3C)
 
 **English** · [中文](README.zh-CN.md)
+
+New to launchers? Start with the **[user guide](docs/user-guide.md)** — it assumes you have never used one. 中文用户请读[用户指南](docs/user-guide.zh-CN.md)。
 
 ## What is Fulcrum?
 
 Press one global hotkey and a floating command palette appears:
 
 - **Fuzzy-search everything** — apps, clipboard history, snippets, each with weighted multi-field ranking
+- **Paste anywhere** — clipboard rows paste straight into the app you came from; Copy stays one ⌘K away
 - **Calculate inline** — exact arithmetic, functions, constants; ↵ copies the answer
 - **Clipboard history** — every copy recorded on-device, searchable, pinnable
-- **Snippets** — named text expansions with keywords
+- **Snippets** — named text expansions with keywords, created from the launcher itself (`add snippet addr 42 Wall Street`)
 - **Web-search bangs** — `!g`, `!gh`, `!so`, `!w`, `!yt`, `!m`, `!d`, `!t`
 - **Quicklinks** — your own URL templates claimed by a keyword (`yt nature`), created from the launcher itself
 - **Window management** — left/right half, maximize, almost-maximize, center, restore, natively on all three platforms
 - **File search** — `find <query>` over Spotlight (macOS today; other platforms honestly declined)
-- **BYOK AI** — bring your own OpenAI / Anthropic / Ollama key: `ai summarize`, `ai clean`, `ai translate <lang>`, `ai explain`, `ai <question>` — the answer copies to your clipboard; the key never leaves this machine (never synced)
+- **BYOK AI with streaming** — bring your own OpenAI / Anthropic / Ollama key: `ai summarize`, `ai clean`, `ai translate <lang>`, `ai explain`, `ai chat <msg>`, `ai <question>` — the answer streams into the panel as it is generated and copies to your clipboard when done; the key never leaves this machine (never synced)
 - **System commands** — lock, sleep, restart
-- **Plugins** — any language that speaks JSON over stdio ([FPP1](docs/plugins.md)), plus ten first-party plugins installed from the launcher itself (query `gallery`)
+- **Plugins** — any language that speaks JSON over stdio ([FPP1](docs/plugins.md)), plus eleven first-party plugins installed from the launcher itself (query `gallery`)
 - **Sync (beta)** — settings and snippets mirrored to any cloud-synced folder; a wiped machine restores from the mirror
 
-Search, history, and snippets never leave your device. There is no telemetry in 0.1.
+Search, history, and snippets never leave your device. There is no telemetry.
 
 ## Why another launcher?
 
@@ -49,20 +52,20 @@ fulcrum/
 ├── macos-host/             # SwiftUI panel + Carbon global hotkey
 ├── windows/                # WinUI 3 overlay + RegisterHotKey
 ├── linux/                  # GTK4 panel + X11 grab (Rivet 0.3 Linux preview)
-├── gallery/                # 10 first-party FPP1 plugins (installable in-app)
-├── tests/                  # 43 backend tests (raco test tests/)
-├── docs/                   # plugins.md, release-runbook.md, business plan
+├── gallery/                # 11 first-party FPP1 plugins (installable in-app)
+├── tests/                  # backend tests (raco test tests/)
+├── docs/                   # user-guide.md, plugins.md, release-runbook.md
 ├── site/                   # fulcrum.jrtx.site (GitHub Pages)
 └── .github/workflows/      # CI matrix + tag-driven release pipeline
 ```
 
-## Status: v0.5.0 (developer preview)
+## Status: v0.8.0 (developer preview)
 
-Developer preview. The backend is complete and tested (55/55) and ships a ten-plugin first-party gallery (query `gallery` to install) plus a settings/snippets sync beta (`sync-root`). All three hosts are feature-complete against the backend contract: Windows (WinUI 3), macOS (SwiftUI), and Linux (GTK4) — the Linux host now builds through the official `raco rivet build` Linux path introduced in [Rivet 0.3](https://github.com/turinglambdaai/rivet). `raco rivet doctor` / `dev` is the supported developer loop on every platform.
+Developer preview. The backend is complete and tested (81 test cases over ranking, stores, plugins, AI, and the signed update pipeline) and ships an eleven-plugin first-party gallery (query `gallery` to install) plus a settings/snippets sync beta (`sync-root`). All three hosts track the backend contract: Windows (WinUI 3), macOS (SwiftUI), and Linux (GTK4) — the Linux host builds through the official `raco rivet build` Linux path introduced in [Rivet 0.3](https://github.com/turinglambdaai/rivet). Known platform edges are stated in the [user guide](docs/user-guide.md#troubleshooting) rather than papered over: file search is macOS-only, and the Linux host wants `wtype` for paste-to-frontmost on Wayland. `raco rivet doctor` / `dev` is the supported developer loop on every platform.
 
 ## Development
 
-Prerequisites: [Racket CS](https://racket-lang.org/) 9.3 (stable), a Rivet checkout linked as a package (v0.3.0 or later), and the platform toolchain (Xcode CLT on macOS, VS 2022 Build Tools on Windows, `build-essential cmake pkg-config libgtk-4-dev zlib1g-dev liblz4-dev libncurses-dev` on Linux — `raco rivet doctor` prints the exact list when something is missing).
+Prerequisites: [Racket CS](https://racket-lang.org/) 9.3 (stable), a Rivet checkout linked as a package (v0.3.0 or later), and the platform toolchain (Xcode CLT on macOS, VS 2022 Build Tools on Windows, `build-essential cmake pkg-config libgtk-4-dev zlib1g-dev liblz4-dev libncurses-dev libx11-dev libxtst-dev` on Linux — `raco rivet doctor` prints the exact list when something is missing).
 
 ```bash
 raco pkg install --auto --no-docs --link /path/to/rivet

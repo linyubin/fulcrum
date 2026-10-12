@@ -135,7 +135,69 @@
      (snippet-save! (engine-snippets engine) "Release checklist" "1. tag 2. build" "rel")
      (define rows (engine-search engine "release"))
      (check-true (and (findf (lambda (r) (equal? (row-kind r) "Clipboard")) rows) #t))
-     (check-true (and (findf (lambda (r) (equal? (row-kind r) "Snippet")) rows) #t)))))
+     (check-true (and (findf (lambda (r) (equal? (row-kind r) "Snippet")) rows) #t))
+     ;; Clipboard rows paste to the frontmost app as the primary action;
+     ;; Copy stays one ⌘K away.
+     (define clip-row (findf (lambda (r) (equal? (row-kind r) "Clipboard")) rows))
+     (check-equal? (row-id clip-row) "clip.paste"))))
+
+(test-case "querying the store name lists every snippet"
+  (with-fresh-data-dir
+   (lambda ()
+     (define engine (fixture-engine))
+     (for ([i (in-range 4)])
+       (snippet-save! (engine-snippets engine) (format "S~a" i) "text" (format "k~a" i)))
+     (define rows (engine-search engine "snippets"))
+     (check-equal? (length (filter (lambda (r) (equal? (row-kind r) "Snippet")) rows)) 4))))
+
+(test-case "add snippet one-liner creates through the action"
+  (with-fresh-data-dir
+   (lambda ()
+     (define engine (fixture-engine))
+     ;; Incomplete input offers the syntax, never a half row.
+     (define hint (engine-search engine "add snippet"))
+     (check-equal? (row-id (car hint)) "noop")
+     (check-true (string-contains? (row-title (car hint)) "snippet"))
+     ;; Complete input offers a create row with the packed payload.
+     (define rows (engine-search engine "add snippet addr 42 Wall Street, floor 5"))
+     (define create (findf (lambda (r) (equal? (row-id r) "snippet.save")) rows))
+     (check-true (and create #t))
+     (check-equal? (row-arg create) "addr\u001F42 Wall Street, floor 5")
+     ;; Running it saves: name = keyword, keyword claim = keyword.
+     (define outcome (engine-run engine "snippet.save" (row-arg create)))
+     (check-equal? (car outcome) "ok")
+     (define saved (snippet-by-keyword (engine-snippets engine) "addr"))
+     (check-true (and saved #t))
+     (check-equal? (snippet-text saved) "42 Wall Street, floor 5")
+     (check-equal? (snippet-name saved) "addr")
+     ;; The claim is immediately searchable.
+     (define hits (engine-search engine "addr"))
+     (check-true (and (findf (lambda (r)
+                               (and (equal? (row-kind r) "Snippet")
+                                    (equal? (snippet-keyword
+                                             (snippet-ref (engine-snippets engine)
+                                                          (row-arg r)))
+                                            "addr")))
+                             hits)
+                      #t)))))
+
+(test-case "paste actions hand text to the host event, not the clipboard"
+  (with-fresh-data-dir
+   (lambda ()
+     (define engine (fixture-engine))
+     (define cid (clipboard-item-id
+                  (clipboard-record! (engine-clipboard engine) "pasted text")))
+     (define outcome (engine-run engine "clip.paste" cid))
+     (check-equal? (car outcome) "copied")
+     (check-equal? (cdr outcome)
+                   (list (cons 'paste-to-frontmost "pasted text")))
+     (snippet-save! (engine-snippets engine) "Note" "remember the milk" "milk")
+     (define s (snippet-by-keyword (engine-snippets engine) "milk"))
+     (define snip-outcome (engine-run engine "snip.paste" (snippet-id s)))
+     (check-equal? (cdr snip-outcome)
+                   (list (cons 'paste-to-frontmost "remember the milk")))
+     (check-true (string-contains? (car (engine-run engine "clip.paste" "nope"))
+                                   "not found")))))
 
 (test-case "recents boost reorders repeat choices"
   (with-fresh-data-dir
@@ -174,17 +236,22 @@
      ;; Linux fixtures, the bundle on macOS) — that is what Reveal opens.
      (check-equal? (list-ref (car app-actions) 4)
                    "/usr/share/applications/firefox.desktop")
-     ;; Clipboard rows: pin (label reflects state) + delete.
+     ;; Clipboard rows: ↵ pastes to the frontmost app (the primary),
+     ;; the panel keeps Copy, then the pin toggle and delete.
      (define cid (clipboard-item-id
                   (clipboard-record! (engine-clipboard engine) "hello")))
-     (check-equal? (list-ref (car (engine-row-actions engine "clip.copy" cid)) 1)
+     (define clip-actions (engine-row-actions engine "clip.paste" cid))
+     (check-equal? (list-ref (car clip-actions) 0) "clip.copy")
+     (check-equal? (list-ref (cadr clip-actions) 1)
                    "Pin")
      (check-true (clipboard-item-pinned?
                  (clipboard-toggle-pin! (engine-clipboard engine) cid)))
-     (check-equal? (list-ref (car (engine-row-actions engine "clip.copy" cid)) 1)
+     (check-equal? (list-ref (cadr (engine-row-actions engine "clip.paste" cid)) 1)
                    "Unpin")
-     ;; Snippet rows: delete. Link/file/web rows: copy URL/path.
+     ;; Snippet rows: paste + delete. Link/file/web rows: copy URL/path.
      (check-equal? (list-ref (car (engine-row-actions engine "snip.copy" "s1")) 0)
+                   "snip.paste")
+     (check-equal? (list-ref (list-ref (engine-row-actions engine "snip.copy" "s1") 1) 0)
                    "snip.delete")
      (check-equal? (list-ref (car (engine-row-actions engine "web.open" "https://x")) 0)
                    "copy")

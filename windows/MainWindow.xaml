@@ -7,6 +7,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -29,9 +30,30 @@
             Severity="Informational"
             Message="Starting embedded Racket CS…" />
 
+        <StackPanel
+            x:Name="AiPanel"
+            Grid.Row="2"
+            Margin="12,6,12,4"
+            Spacing="4"
+            Visibility="Collapsed">
+            <TextBlock
+                x:Name="AiPhase"
+                Text="AI is answering…"
+                FontSize="12"
+                FontWeight="SemiBold"
+                Opacity="0.7" />
+            <ScrollViewer MaxHeight="170" VerticalScrollBarVisibility="Auto">
+                <TextBlock
+                    x:Name="AiText"
+                    TextWrapping="Wrap"
+                    IsTextSelectionEnabled="True"
+                    FontSize="13" />
+            </ScrollViewer>
+        </StackPanel>
+
         <ListView
             x:Name="ResultsList"
-            Grid.Row="2"
+            Grid.Row="3"
             Margin="4,4,4,0"
             SelectionMode="Single"
             IsItemClickEnabled="True"
@@ -47,7 +69,7 @@
 
         <TextBlock
             x:Name="HintBar"
-            Grid.Row="3"
+            Grid.Row="4"
             Margin="12,4,12,8"
             Opacity="0.55"
             FontSize="12"
