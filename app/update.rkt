@@ -25,7 +25,8 @@
 ;; and `update-rollout-bucket`, managed by the backend); downloads land under
 ;; <data-dir>/updates and no store file is ever touched.
 
-(require net/base64
+(require crypto
+         net/base64
          net/uri-codec
          net/url
          rivet/distribution
@@ -227,19 +228,23 @@
 ;; ---------- rollout bucket ----------
 
 ;; Stable random 0..99 assigned on first check so staged rollouts are
-;; sticky per installation. Persisted in the typed settings store; without
-;; a store (headless tests) a fresh draw is honest enough — the release
-;; channel manifest currently rolls out to 100.
+;; sticky per installation. Persisted in the typed settings store;
+;; crypto-random-bytes, not `random`: racket/base's PRNG has a fixed seed,
+;; which would put every fresh install in the same lockstep bucket.
 (define (rollout-bucket)
   (define manager (current-update-settings))
   (if manager
       (let ([existing (settings-get manager 'update-rollout-bucket)])
         (if (exact-integer? existing)
             existing
-            (let ([bucket (random 100)])
+            (let ([bucket
+                   (modulo (integer-bytes->integer (crypto-random-bytes 4) #t #t)
+                           100)])
               (settings-set! manager 'update-rollout-bucket bucket)
               bucket)))
-      (random 100)))
+      ;; Without a store (headless tests) a fresh draw is honest enough —
+      ;; the release channel manifest currently rolls out to 100.
+      (modulo (integer-bytes->integer (crypto-random-bytes 4) #t #t) 100)))
 
 ;; ---------- check ----------
 

@@ -4,6 +4,44 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
+## [0.10.1] - 2026-10-14
+
+Engineering-alignment patch — no feature changes. The hosts consume
+Rivet as a package library (rivet v0.11.0) instead of compiling its
+sources, the update rollout bucket draws from cryptographic randomness,
+and the website joins the family design system (dark theme, Chinese
+default).
+
+### Changed
+
+- **Rivet is consumed as a package, never as compiled-in sources**
+  (project constraint, rivet#238). The Linux host builds via
+  `add_subdirectory("${RIVET_ROOT}/platform/linux")` + `rivet::platform`
+  instead of hand-copying the platform translation-unit list; the
+  Windows host links `rivet-host.vcxproj` through a `ProjectReference`
+  (CRT flavor forwarded via `RivetRuntimeLibrary`) instead of
+  `ClCompile`-ing four Rivet sources; the macOS host depends on the
+  rivet root `Package.swift` (`.package(path: rivetRoot)`, products of
+  package "rivet") instead of the platform subpackage. CI and release
+  workflows pin Rivet to the `v0.11.0` git tag instead of floating on
+  the package catalog, and the `setup-embed-racket` action reference
+  moves from `@main` to `@v0.11.0`.
+- **Website (fulcrum.jrtx.site)** aligns with the family design system:
+  copper accent palette (`#c15f3c` on `#faf7f2`), a complete dark theme
+  with a manual toggle (localStorage choice, system-preference fallback,
+  anti-flash head script), and `data-i18n` dictionaries with Chinese as
+  the default language (`lang="zh-CN"`; title and meta description
+  switch with the language). The hardcoded version badge is gone — the
+  homepage no longer states a version number.
+
+### Fixed
+
+- **Update rollout buckets are cryptographically random.** The sticky
+  0..99 bucket assigned on first update check is now derived from
+  `crypto-random-bytes` instead of `random` — racket/base's PRNG has a
+  fixed seed, which put every fresh install into the same lockstep
+  bucket and would have defeated any staged rollout.
+
 ## 0.10.0 — October 13, 2026
 
 Snippet auto-expansion on macOS and Windows — the last core Raycast

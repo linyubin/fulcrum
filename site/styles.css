@@ -19,23 +19,26 @@
  * Fulcrum product site — turinglambdaai family design system.
  * Same token skeleton and class vocabulary as rivet.jrtx.site; each site
  * also overrides the accent variables in a small inline <style> block in
- * its <head>. Fulcrum's accent family is warm amber/copper.
+ * its <head>. Fulcrum's accent family is warm copper. Themes follow the
+ * family standard: data-theme is set by an inline head script (localStorage
+ * choice, else system preference); the dark block below restates every
+ * token so nothing light leaks through.
  */
 
 :root {
-    --bg: #F5F5F7;
-    --bg-card: #FFFFFF;
-    --bg-elevated: #FFFFFF;
-    --text: #1D1D1F;
-    --text-2: #6E6E73;
-    --text-3: #8E8E93;
-    --accent: #D97706;
-    --accent-hover: #B45309;
-    --accent-soft: rgba(217, 119, 6, 0.15);
-    --accent-tint: rgba(217, 119, 6, 0.08);
-    --accent-bright: #FBBF24;
-    --border: rgba(0, 0, 0, 0.10);
-    --border-strong: rgba(0, 0, 0, 0.16);
+    --bg: #faf7f2;
+    --bg-card: #ffffff;
+    --bg-elevated: #ffffff;
+    --text: #1f1d1a;
+    --text-2: #6b6660;
+    --text-3: #948e86;
+    --accent: #c15f3c;
+    --accent-hover: #a94f30;
+    --accent-soft: #f7e5dd;
+    --accent-tint: rgba(193, 95, 60, 0.08);
+    --accent-bright: #d97a55;
+    --border: #e8e2d9;
+    --border-strong: rgba(31, 29, 26, 0.16);
 
     --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-serif: "Newsreader", Georgia, serif;
@@ -52,6 +55,60 @@
 
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+/* Theme: data-theme is set by the inline head script — from localStorage
+   when the user has picked manually, otherwise from the system preference.
+   Explicit light overrides exist so a manual choice wins over the OS.
+   Values follow the family sites (payback/keepsake). */
+:root[data-theme="dark"] {
+    --bg: #1b1a18;
+    --bg-card: #24221f;
+    --bg-elevated: #2a2724;
+    --text: #ece9e2;
+    --text-2: #a6a099;
+    --text-3: #85807a;
+    --accent: #d08a6e;
+    --accent-hover: #dba289;
+    --accent-soft: #3a2d27;
+    --accent-tint: rgba(208, 138, 110, 0.12);
+    --border: #35322d;
+    --border-strong: rgba(236, 233, 226, 0.16);
+}
+:root[data-theme="dark"] .nav-container { background: rgba(27, 26, 24, 0.78); }
+
+:root[data-theme="light"] {
+    --bg: #faf7f2;
+    --bg-card: #ffffff;
+    --bg-elevated: #ffffff;
+    --text: #1f1d1a;
+    --text-2: #6b6660;
+    --text-3: #948e86;
+    --accent: #c15f3c;
+    --accent-hover: #a94f30;
+    --accent-soft: #f7e5dd;
+    --accent-tint: rgba(193, 95, 60, 0.08);
+    --border: #e8e2d9;
+    --border-strong: rgba(31, 29, 26, 0.16);
+}
+:root[data-theme="light"] .nav-container { background: rgba(250, 247, 242, 0.78); }
+
+/* theme toggle button */
+.theme-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: var(--text-2);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: all 0.2s var(--ease);
+}
+.theme-btn:hover { color: var(--accent); background: var(--accent-tint); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -79,7 +136,7 @@ ul { list-style: none; }
     top: 0;
     width: 100%;
     height: 56px;
-    background: rgba(245, 245, 247, 0.78);
+    background: rgba(250, 247, 242, 0.78);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     border-bottom: 1px solid var(--border);
@@ -466,18 +523,6 @@ section { padding: 72px 0; }
     flex-wrap: wrap;
     margin-top: 32px;
 }
-.version-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    padding: 5px 14px;
-    border-radius: 999px;
-    font-size: 13px;
-    color: var(--text-2);
-}
-.version-badge .ver { color: var(--accent); font-weight: 600; }
 .rivet-chip {
     display: inline-flex;
     align-items: center;
