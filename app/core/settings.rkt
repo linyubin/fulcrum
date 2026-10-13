@@ -149,7 +149,7 @@
   ;; Mirror the whole file after every successful write. Reading the root
   ;; back through the typed manager also means a mid-session sync-root
   ;; change takes effect from the very next write.
-  (sync-mirror! (rivet:settings-store-path (settings-manager-store manager))
+  (sync-mirror! (settings-path)
                 (or (sync-root-override) (settings-get manager 'sync-root)))
   #t)
 
