@@ -184,6 +184,14 @@
 
 (define (rows-for engine query)
   (define rows (engine-search engine query))
+  ;; Discoverability: an empty query always shows a Settings row so the
+  ;; user can find the settings without knowing to type "settings".
+  (define settings-entry
+    (if (string=? (string-trim query) "")
+        (list (list "noop" "⚙ Settings"
+                    "type settings to configure theme, hotkey, AI, plugins…"
+                    "Setting" "" "setting" "" ""))
+        '()))
   (define filtered
     (if (settings-get (settings!) 'web-search-enabled)
         rows
@@ -201,9 +209,10 @@
         [("update" "updates") (append ur sr ar pc)]
         [("settings") (append sr ar pc ur)]
         [else (append sr ar pc ur)])))
-  (if (member (string-trim (string-downcase query)) backend-surface-words)
+  (append settings-entry
+    (if (member (string-trim (string-downcase query)) backend-surface-words)
       (append backend-rows filtered)
-      (append filtered backend-rows)))
+      (append filtered backend-rows))))
 
 ;; ---- settings-as-rows ----------------------------------------------------
 ;;
