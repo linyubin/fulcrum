@@ -1,174 +1,239 @@
 # Fulcrum 用户指南
 
-从零开始讲清楚 Fulcrum 的每一项功能——假设你从未用过启动器类产品。
+一次按键，整台电脑触手可及。
+
 [English](user-guide.md)
 
-## 什么是启动器？
+---
 
-平时用电脑是这样的：翻菜单找应用、层层点进文件夹找文件、同一段话复制粘贴第无数次。**启动器**把这些全部换成一个习惯：按一下快捷键，输入你想要的东西，回车。它是整台电脑的搜索框，悬浮在你正在做的事之上。
+## 一分钟上手
 
-Fulcrum 就是这样的产品，覆盖 macOS、Windows 和 Linux——三个平台功能一致、键位一致。你搜索过什么、复制过什么，都不会离开你的电脑。
+1. 按 <kbd>Alt</kbd>+<kbd>Space</kbd>（macOS 是 <kbd>⌥</kbd>+<kbd>Space</kbd>），面板出现。
+2. 输入 `calc`，计算器出现在结果里，回车，打开了。
+3. 再按热键，输入 `128*768`，答案出现在结果里，回车，已复制。
+4. 再按热键。你已经会用了。
 
-## 一个习惯走天下
+整个产品就是：**一个键 → 输入 → 回车**。下面全是细节。
 
-- **召唤**：按 `Alt+Space`（macOS 上是 `⌥Space`），面板出现。
-- **输入**：你想要的东西——应用名、算式、搜索词。
-- **回车**：执行选中的结果。
-- **Esc**：一层一层退掉屏幕上的东西。输入框里有字，第一下清空；已经空了，第二下隐藏面板。Esc 永远不会执行任何东西。
-- **↑ / ↓**：移动选中项。**Ctrl+K**（macOS 上 `⌘K`）：打开选中结果的附加动作（复制、删除、置顶、粘贴……）。
+---
 
-面板随时可以隐藏，它会安静待命直到你再次召唤；点别处时面板也会自动让开。
-
-> 快捷键可以改——见[设置](#设置)。如果 `Alt+Space` 没反应，多半是被别的应用占了；Fulcrum 会自动退到 `Ctrl+Alt+Space`，并在状态栏告诉你。
-
-## 日常功能
+## 你能做什么
 
 ### 启动应用
 
-直接输入应用名——`firefox`、`term`、`calc`。Fulcrum 用模糊匹配搜索已安装的应用：`ffx` 能找到 Firefox，手滑打错也能容忍。常用的应用会随使用越来越靠前。
+输入应用名的任意片段——`firefox`、`term`、`calc`。模糊匹配：`ffx` 能找到 Firefox，手滑打错也能容忍。常用的应用会越来越靠前。
+
+### 粘贴任何东西到任何地方
+
+你复制的每段文字都会被记住。输入 `clip` 或那段文字里的任意词，按回车——文字直接粘贴进你刚才在用的应用。不用切窗口，不用按 <kbd>Ctrl</kbd>+<kbd>V</kbd>。
+
+> macOS 首次使用会请求辅助功能权限，授权一次即可全局生效。
 
 ### 行内计算
 
-在搜索框里直接敲算式：`128*768`、`(2+3)^4`、`sqrt(2)`。答案直接出现在结果里，回车即复制。函数（`sin`、`log2`、`min`……）、常量（`pi`、`e`）、精确算术都支持。
+在搜索框里敲算式：`128*768`、`(2+3)^4`、`sqrt(2)`、`sin(pi/4)`。答案出现在结果最上面，回车复制。
 
-### 剪贴板历史
+### 片段自动展开
 
-你复制的每一段文字都会被记住（只记在本机）——可搜索、可置顶、绝不外发。
-
-- 输入 `clip`（或任何你复制过的内容里的词），选中那条记录。
-- **回车直接粘贴进你刚才在用的应用**——不用切换窗口，不用再按 Ctrl+V。这是日常最顺手的一招：这边搜到，那边就粘贴好了。
-- Ctrl+K 提供传统玩法：**复制**（老行为）、**置顶**（不被新记录挤掉）、**删除**。
-
-剪贴板历史可以在设置里关掉。Linux 上由 GTK 宿主记录运行期间的剪贴板变化。
-
-### 片段（Snippet）
-
-片段就是存在一个关键词下的文字：你的地址、银行账号、标准的会议回复。
-
-不用离开启动器就能创建：
+把一段文字存在一个关键词下面，然后在任何应用里输入那个关键词加空格，Fulcrum 原地替换成完整文本——自动的，不用按任何快捷键：
 
 ```
-add snippet addr 上海市静安区南京西路 42 号
+add snippet addr 南京西路 42 号
 ```
 
-就这样——关键词是 `addr`，文字是后面整段，出现的那一行回车即保存。输入关键词或文字片段就能找到；回车复制，Ctrl+K 可以**粘贴到前台应用**或**删除**。输入 `snippets` 可以列出全部。
+在邮件里输入 `addr` + 空格，就变成了 `南京西路 42 号`。在 `settings` → `expansion-enabled` 里可以开关（macOS 和 Windows 支持；Linux 合成器不允许所需的输入监听）。
 
-**自动展开**（macOS 和 Windows）：在任何应用里直接输入关键词——`addr` 加一个空格——Fulcrum 会原地把它替换成完整文本，无需任何快捷键。可在 `settings` → `expansion-enabled` 开关；macOS 需要辅助功能权限。Linux 暂不支持（Wayland 不允许所需的输入监听）。
+片段通过 [Sync beta](#sync-beta) 跨机器同步。
 
-片段跟随 [Sync beta](#sync-beta) 同步。
+### 网页搜索
 
-### 快捷链接（Quicklink）
+| 输入 | 打开 |
+|---|---|
+| `!g rockets` | Google |
+| `!d rockets` | DuckDuckGo |
+| `!gh rivet` | GitHub |
+| `!so segfault` | Stack Overflow |
+| `!w saturn` | 维基百科 |
+| `!yt lofi` | YouTube |
+| `!m 埃菲尔铁塔` | Google 地图 |
+| `!t fulcrum` | X/Twitter |
 
-快捷链接是带关键词的收藏。行内创建：
+没被别处匹配的普通文字，最后会出现一条通用搜索（默认 `!g`，可配）。
+
+### 快捷链接
 
 ```
 add link yt https://youtube.com/search?q={query}
 ```
 
-之后 `yt lofi hip hop` 就会打开那个搜索。URL 里的 `{query}` 会被替换成关键词后面的内容。输入 `quicklinks` 可以查看和删除。
-
-### 网页搜索
-
-Fulcrum 支持 DuckDuckGo 风格的 bang：
-
-| 输入 | 打开 |
-|---|---|
-| `!g rockets` | Google 搜索 |
-| `!d rockets` | DuckDuckGo 搜索 |
-| `!gh rivet` | GitHub 搜索 |
-| `!so segfault` | Stack Overflow 搜索 |
-| `!w saturn` | 维基百科 |
-| `!yt lofi` | YouTube 搜索 |
-| `!m eiffel tower` | Google 地图 |
-| `!t fulcrum` | X/Twitter 搜索 |
-
-其他没被别处匹配的普通文字，最后会出现一条通用网页搜索（默认 `!g`，可配置）。
+之后 `yt lofi` 就打开 YouTube 搜索。`{query}` 被替换成关键词后面的内容。输入 `quicklinks` 可以查看和删除。
 
 ### 窗口管理
 
-输入 `window` 或命令名的一部分：**Left Half**（左半屏）、**Right Half**（右半屏）、**Maximize**（最大化）、**Almost Maximize**（近全屏）、**Center**（居中）、**Restore**（还原）。命令作用于你召唤 Fulcrum 之前最前面的那个窗口。Restore 撤销该窗口上一次平铺。
+输入 `window` 或命令名的一部分。**左半屏**、**右半屏**、**最大化**、**近最大化**、**居中**、**还原**——作用于你召唤 Fulcrum 之前最前面的那个窗口。
 
-### 找文件（macOS）
+### 找文件
 
-`find invoice` 通过 Spotlight 搜索文件名。Windows 和 Linux 上会诚实地提示需要平台搜索索引，而不是假装搜过。
+`find 发票` 通过 Spotlight 搜文件名（macOS）。其他平台会诚实提示需要系统搜索索引。
 
 ### 系统命令
 
-输入 `lock`、`sleep`、`restart` 锁屏、休眠、重启——Fulcrum 只提供你的平台上真实存在的命令。
+`lock`、`sleep`、`restart`、`toggle dark mode`、`empty trash`——Fulcrum 只提供你的平台上真实存在的命令。
+
+### 表情搜索
+
+输入表情英文名的两个以上字母——`grin`、`fire`、`heart`——匹配的表情内联出现。回车直接粘贴进你正在用的应用，<kbd>Ctrl</kbd>+<kbd>K</kbd> 改为复制。
+
+---
 
 ## AI（自带密钥）
 
-Fulcrum 的 AI 是 BYOK 模式：用你自己的 OpenAI、Anthropic 或本地 Ollama 密钥。Fulcrum 不收费、也不经手——密钥存在本地文件里、永不同步；只有你执行 AI 命令时，提示词才会发给你配置的服务商。
+Fulcrum 的 AI 用你自己的 OpenAI、Anthropic 或本地 Ollama 密钥。Fulcrum 不收费、不经手数据——密钥存在本地文件里，永不同步。只有你执行 AI 命令时，提示词才会发给你选的服务商。
 
-一次性设置：
+### 一次性设置
 
-1. 输入 `settings`，运行 `ai-provider` 那一行，循环切换到你的服务商（`openai`、`anthropic` 或 `ollama`）。
-2. 输入 `ai key sk-…`（你的真实密钥）回车。Ollama 不需要密钥——只要 `ollama serve` 在跑就行。
+1. 输入 `settings`，运行 `ai-provider` 那行，切到你的服务商。
+2. 输入 `ai key sk-…`（你的真实密钥）回车。Ollama 不需要密钥——只要 `ollama serve` 在跑。
 
-用法：
+### 用法
 
-- `ai summarize`——总结剪贴板里的内容。
-- `ai clean`——修剪贴板文本的语法和拼写。
-- `ai translate zh`——把剪贴板翻译成中文（或任何语言）。
-- `ai explain`——解释剪贴板里的内容。
-- `ai chat 解释一下黑话`——会记住本次会话前面几轮的提问。
-- 或者直接问：任何以 `？`/`?` 结尾、足够长的输入会自动出现「Ask AI」一行。
+| 输入 | 效果 |
+|---|---|
+| `ai summarize` | 总结剪贴板内容 |
+| `ai clean` | 修正剪贴板文本的语法拼写 |
+| `ai translate zh` | 翻译剪贴板到中文（或任意语言） |
+| `ai explain` | 解释剪贴板内容 |
+| `ai chat 解释一下 X` | 会记住前几轮对话 |
+| `什么是熵？` | 任何以 ？ 结尾的问句自动出现 AI 行 |
 
-答案会**流式地打进面板里**——它生成的时候你就能开始读——完成后自动落到剪贴板。Esc 关掉它；对 `ai` 里的"上一条回答"行按 Ctrl+K 可以直接粘贴进你在用的应用。
+答案**流式打进面板**——模型还在生成你就能开始读——完成后自动进剪贴板。
+
+### 记忆与控制
+
+对话历史**跨重启持久化**（本地存储，永不同步）。AI 在同一服务商下跨会话记住上下文。
+
+- `ai undo`——回退最后一条对话，换个方向重试
+- `ai reset`——清空对话重来
+- `ai persona 你是简洁的技术写作者`——持久化人设，每次请求都生效
+- `ai model gpt-4o`——不离开启动器切换模型
+
+---
 
 ## 插件
 
-插件可以用任何能输出 JSON 的语言编写——内置画廊自带十一个真实插件：单位换算（`u`）、Unix 时间戳（`ts`）、正则表达式（`re`）、时区（`tz`）、GitHub 仓库搜索（`gh`）、crates.io（`crate`）、Homebrew（`brew`）、Docker 镜像（`dk`）、winget（`winget`）、Bitwarden（`bw`）、汇率换算（`cur`）。
+插件用任何能输出 JSON 的语言编写。内置画廊自带十一个真实插件：单位换算（`u`）、时间戳（`ts`）、正则（`re`）、时区（`tz`）、GitHub 搜索（`gh`）、crates.io（`crate`）、Homebrew（`brew`）、Docker（`dk`）、winget（`winget`）、Bitwarden（`bw`）、汇率（`cur`）。
 
 - 输入 `gallery` 查看全部；回车安装或卸载。
-- 输入 `plugins` 查看已装插件，逐个开关。
-- 输入 `plugins <名字>` 看插件详情页：每条命令带可复制的示例。
-- `install plugin /路径/文件夹` 从任意文件夹安装插件——写一个插件只需一个 manifest 加一个脚本，见 [docs/plugins.md](plugins.md)，Python 就够。
+- 输入 `plugins` 逐个开关。
+- 输入 `plugins <名字>` 看详情页。
+- `install plugin /路径` 从任意文件夹安装。
+- `plugin set <id> <pref> <value>` 配置插件偏好。
+
+写一个插件：一个 manifest + 一个脚本，见 [docs/plugins.md](plugins.md)——Python 就够。
+
+---
 
 ## 设置
 
-输入 `settings`，运行对应的行即可修改——每行在合法取值间循环：
+输入 `settings`，运行对应的行即可修改：
 
-- **language**——界面语言（zh/en；更新对话框跟随）。
-- **theme**——system / light / dark，面板立即跟随。
-- **hotkey**——在 `alt+space`、`ctrl+alt+space`、`ctrl+shift+space`、`alt+shift+space` 间循环。组合键被占用时 Fulcrum 会退回默认并提示。
-- **max-results**——列表最多显示几行。
-- **clipboard-enabled**——剪贴板历史开关。
-- **web-search-enabled**——网页搜索行开关。
-- **plugins-enabled**——插件加载开关。
-- **ai-provider**——见 AI 一节。
+| 设置 | 说明 |
+|---|---|
+| language | 界面语言（zh / en） |
+| theme | system / light / dark，即时生效 |
+| hotkey | 循环：`alt+space` → `ctrl+alt+space` → `ctrl+shift+space` → `alt+shift+space` |
+| max-results | 列表行数（5–25） |
+| clipboard-enabled | 剪贴板历史开关 |
+| expansion-enabled | 片段自动展开开关 |
+| web-search-enabled | 网页搜索行开关 |
+| plugins-enabled | 插件加载开关 |
+| ai-provider | AI 服务商 |
 
-进阶用户可以直接改 `settings.json`。hotkey 接受 `mod+key` 形式——修饰键 `alt/ctrl/shift/cmd/win/super`（至少一个），键位从这些里选：`space`、`a`–`z`、`0`–`9`、`f1`–`f12`、`comma`、`period`、`minus`、`equal`、`tab`。同一写法三平台通用。
+自定义值（热键、模型、同步目录）直接输入，或编辑数据目录下的 `settings.json`。热键接受 `mod+key` 格式——修饰键 `alt/ctrl/shift/cmd/win/super`（至少一个），键位 `space`、`a`–`z`、`0`–`9`、`f1`–`f12`、`comma`、`period`、`minus`、`equal`、`tab`。三平台通用。
+
+---
 
 ## 更新
 
-输入 `update`，运行 **Check for updates now**。有新版本时后台下载、实时进度。macOS 上 Fulcrum 原地换包重启；Windows 和 Linux 会打开下载好的安装包并给出诚实的手动步骤提示。更新包全部有签名；校验失败会被拒收，绝不安装。
+输入 `update` → **Check for updates now**。后台下载；macOS 原地换装重启。更新包 Ed25519 签名——校验失败拒收，绝不安装。
 
-## Sync beta
+---
 
-如果你在用 iCloud Drive、Dropbox、Syncthing 或任何目录同步服务，把 `sync-root`（通过 `settings.json` 或环境变量 `FULCRUM_SYNC_DIR`）设到同步盘里的一个目录。设置和片段会镜像过去——新机器或被抹掉的机器在首次启动时自动恢复。剪贴板历史和 AI 密钥**刻意**不参与同步。
+## 同步 beta
 
-## 键位速查
+把 `sync-root` 设到 iCloud Drive、Dropbox、Syncthing 或任何同步目录里。设置和片段镜像过去；新机器首次启动自动恢复。剪贴板历史和 AI 密钥**刻意**不同步。
 
-| 按键 | 动作 |
-|---|---|
-| `Alt+Space`（默认） | 显示 / 隐藏面板 |
-| 输入 | 搜索一切 |
-| `↑` / `↓` | 移动选中 |
-| `回车` | 执行选中（剪贴板行为直接粘贴） |
-| `Ctrl+K` / `⌘K` | 选中项的附加动作 |
-| `Esc` | 逐层退掉：附加动作 → AI 回答 → 查询词 → 面板 |
-
-## 疑难排查
-
-- **快捷键没反应。** 组合键被别的应用占了。Fulcrum 会退到 `Ctrl+Alt+Space` 并在状态栏说明；也可以从托盘图标（Windows）、菜单栏（macOS）或 `fulcrum --toggle`（Linux）打开。
-- **macOS 上「粘贴到前台」没反应。** 合成按键需要辅助功能权限：系统设置 → 隐私与安全性 → 辅助功能 → 勾选 Fulcrum。窗口管理命令用的是同一个权限。
-- **Linux 上「粘贴到前台」。** X11 开箱即用。Wayland 需要安装 `wtype`（合成器不允许应用直接注入输入——这是安全特性，Fulcrum 尊重它）。
-- **Linux（Wayland）：快捷键。** Wayland 合成器禁止应用自己做全局按键抓取，Fulcrum 改走桌面门户注册：首次启动时合成器会弹出确认框，请你授权 "Summon Fulcrum"（默认 ALT+Space；最终绑定以合成器为准）。需要支持门户的桌面（GNOME 48+、KDE Plasma 6+）；用 `echo $XDG_SESSION_TYPE` 可确认会话类型。较老的 Wayland 合成器上，请在合成器设置里自定义快捷键绑定 `fulcrum --toggle`（GNOME：设置 → 键盘 → 自定义快捷键；KDE：系统设置 → 快捷键）。开机常驻：添加自启动条目 `~/.config/autostart/fulcrum.desktop`，`Exec=/path/to/fulcrum`——应用启动后隐藏驻留，`fulcrum --toggle` 呼出。关闭面板只是隐藏，不会退出。
-- **AI 提示没有密钥。** 先在设置里选好服务商，再运行 `ai key <密钥>`。Ollama 不需要密钥，只要 `ollama serve` 在跑。
-- **Linux 上剪贴板历史是空的。** 只记录 Fulcrum 运行期间的复制，面板只显示启动以来捕获的内容。
-- **数据都在哪？** 全部在一个数据目录里（`FULCRUM_DATA_DIR`）：各存储是 JSON，密钥在 `ai-keys.json`。删掉它，Fulcrum 就是全新状态。
+---
 
 ## 隐私
 
-搜索、历史、片段永不离开你的设备。没有遥测。Fulcrum 发起的网络请求只有三种：你触发的更新检查（以及节流后的静默检查，都指向签名的发布源）、你显式运行的网页搜索、你显式运行的 AI 提示——只发给你配置的服务商，带着你自己的密钥。
+| 数据 | 存在哪 | 离开你的设备？ |
+|---|---|---|
+| 搜索历史 | 不存储 | 从不 |
+| 剪贴板历史 | 本地 JSON | 从不 |
+| 片段 | 本地 JSON（+ 你配置的同步镜像） | 仅到你自己选的云盘 |
+| AI 提示 | 不存储（仅传输中） | 仅到你选的 AI 服务商 |
+| AI 对话 | 本地 JSON | 从不 |
+| API 密钥 | 本地文件 | 从不 |
+| 遥测 | 不存在 | 无数据可发 |
+
+Fulcrum 只发三种网络请求：更新检查（签名、节流）、你主动执行的网页搜索、你主动执行的 AI 提示。
+
+---
+
+## 键位速查
+
+| 按键 | 场景 | 动作 |
+|---|---|---|
+| `Alt+Space` | 任意时刻 | 显示 / 隐藏面板 |
+| 输入 | 面板内 | 搜索一切 |
+| `↑` `↓` | 面板内 | 移动选中 |
+| `回车` | 选中结果 | 执行（剪贴板 = 粘贴；表情 = 插入；文件 = 打开） |
+| `Ctrl+K` / `⌘K` | 选中结果 | 附加动作 |
+| `Tab` | 选中结果 | 标题补全到搜索框 |
+| `Esc` | 面板内 | 逐层退掉：动作 → 详情 → AI → 查询词 → 隐藏 |
+
+---
+
+## 从 Raycast 过来？
+
+同样的地方：热键 → 输入 → 回车的循环。应用启动、剪贴板、片段、快捷链接、计算器、窗口管理、文件搜索、网页搜索、系统命令、扩展、深色模式——全都有。
+
+**我们不一样的地方，以及为什么：**
+
+- **免费，没有账号。** Fulcrum 没有 Pro 会员，没有登录，没有账号体系。这个页面上写的一切都是免费的，永远。
+- **三平台平等。** macOS、Windows、Linux 功能相同、键位相同、原生 UI。不是一头优先两头将就。
+- **BYOK AI 不订阅。** 用你自己的密钥。没有月费，没有按次计费，数据不过 Fulcrum 的服务器。
+- **本地优先。** 你的数据不离开设备，除非你主动让它走（AI 提示、网页搜索）。同步不需要云账号——用你已有的文件夹同步服务。
+- **插件用任何语言。** Raycast 只收 TypeScript。Fulcrum 接受任何读 stdin 写 JSON 的程序——Python、Go、Rust、shell 脚本。
+- **专注，不臃肿。** Fulcrum 把启动器的事做好，不试图变成窗口管理器、笔记应用或 AI 聊天机器人。
+
+**还没做到的（诚实清单）：** 插件生态年轻（11 个内置 vs Raycast 的几千个）；剪贴板只收文本；文件搜索仅限 macOS；片段自动展开不支持 Linux。
+
+---
+
+## 排障
+
+- **热键没反应。** 组合键被占了。Fulcrum 自动退到 `Ctrl+Alt+Space` 并提示。也可以从托盘图标（Windows）、菜单栏（macOS）、`fulcrum --toggle`（Linux）打开。
+
+- **macOS 上粘贴回前台没反应。** 授权辅助功能：系统设置 → 隐私与安全性 → 辅助功能 → 勾选 Fulcrum。
+
+- **Linux 上粘贴回前台。** X11 开箱即用。Wayland 装 `wtype`。
+
+- **AI 说没有密钥。** 先选服务商再运行 `ai key <密钥>`。Ollama 不需要密钥。
+
+- **想要的热键被占。** `settings` → `hotkey` 循环切换。
+
+- **数据在哪？** 全部在一个数据目录里（`FULCRUM_DATA_DIR`）。删掉就是全新状态。
+
+---
+
+## 为什么选 Fulcrum？
+
+启动器是你每天用几百次的工具。它应该快、私密、属于你。
+
+Fulcrum 建在 [Rivet](https://rivet.jrtx.site) 之上：一个 Racket 大脑嵌入每个平台的原生 UI——macOS 用 SwiftUI，Windows 用 WinUI 3，Linux 用 GTK4。不是 Electron，不是网页套壳。Windows 版就是 Windows 应用，macOS 版就是 macOS 应用。
+
+我们是后来者。这意味着我们研究了 Raycast 用户的抱怨——AI 功能挤占基础稳定性、功能膨胀、Pro 会员门槛——然后做了不同的选择。Fulcrum 把优先级放在：快速搜索、可靠操作、诚实的错误、你的数据留在你的机器上。
+
+源码可用（BUSL-1.1，到期转 MIT）。插件协议 MIT。无遥测。无账号。无云。

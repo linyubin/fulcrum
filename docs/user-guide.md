@@ -1,282 +1,343 @@
 # Fulcrum User Guide
 
-Everything you need to use Fulcrum, written for someone who has never
-used a launcher before. [中文版](user-guide.zh-CN.md)
+Press one key. Everything on your computer is within reach.
 
-## What is a launcher?
+[中文版](user-guide.zh-CN.md)
 
-Normally, using your computer means hunting: clicking through menus to
-find an app, digging through folders for a file, typing the same reply
-over and over. A **launcher** replaces all of that with one habit: press
-a key, type what you want, press Enter. It is a search box for your
-entire computer, and it floats above whatever you are doing.
+---
 
-Fulcrum is that, for macOS, Windows, and Linux — with the same features
-and the same keyboard on all three. Nothing you search or copy leaves
-your machine.
+## Your first minute
 
-## The one habit
+1. Press <kbd>Alt</kbd>+<kbd>Space</kbd> (macOS: <kbd>⌥</kbd>+<kbd>Space</kbd>). A panel appears.
+2. Type `calc`. Your calculator app appears. Press <kbd>Enter</kbd>. It opens.
+3. Press the hotkey again. Type `128*768`. The answer appears. Press <kbd>Enter</kbd>. It is copied.
+4. Press the hotkey again. You already know how to use Fulcrum.
 
-- **Summon**: press `Alt+Space` (on macOS: `⌥Space`). A panel appears.
-- **Type**: what you want — an app name, a calculation, a search.
-- **Enter**: run the selected result.
-- **Esc**: dismiss what is on screen, one layer at a time. With text in
-  the box, the first Esc clears it; when it is already empty, the second
-  Esc hides the panel. Fulcrum never runs anything on Esc.
-- **↑ / ↓**: move the selection. **Ctrl+K** (`⌘K` on macOS): open extra
-  actions for the selected result (copy, delete, pin, paste…).
-- Hide the panel any time; it stays out of your way until summoned
-  again. The panel also hides itself when you click elsewhere.
+That's the whole product: **one key → type → Enter**. Everything below
+is detail.
 
-> The hotkey is configurable — see [Settings](#settings). If
-> `Alt+Space` does nothing, another app owns it; Fulcrum falls back to
-> `Ctrl+Alt+Space` and tells you in its status bar.
+---
 
-## Everyday features
+## What you can do
 
 ### Launch apps
 
-Just type the app's name — `firefox`, `term`, `calc`. Fulcrum searches
-your installed applications with fuzzy matching: `ffx` finds Firefox,
-typos tolerated. The apps you launch most often float to the top over
-time.
+Type any part of an app's name — `firefox`, `term`, `calc`. Fulcrum
+matches loosely: `ffx` finds Firefox, typos tolerated. Frequently
+launched apps rank higher over time.
+
+### Paste anything, anywhere
+
+Every piece of text you copy is remembered. Type `clip` or any word
+from what you copied, then press <kbd>Enter</kbd> — the text is pasted
+directly into the app you were just using. No window switch, no
+<kbd>Ctrl</kbd>+<kbd>V</kbd>.
+
+> macOS asks for the Accessibility permission on first use. Grant it
+> once and paste-to-frontmost works everywhere.
 
 ### Calculate inline
 
-Type any expression where you would type a search: `128*768`,
-`(2+3)^4`, `sqrt(2)`. The answer appears as a result; Enter copies it to
-the clipboard. Functions (`sin`, `log2`, `min`…), constants (`pi`, `e`),
-and exact arithmetic all work.
+Type an expression where you would type a search: `128*768`, `(2+3)^4`,
+`sqrt(2)`, `sin(pi/4)`. The answer appears as the top result.
+<kbd>Enter</kbd> copies it.
 
-### Clipboard history
+### Expand snippets as you type
 
-Every piece of text you copy is remembered (on this machine only) —
-searchable, pinnable, and never sent anywhere.
-
-- Type `clip` (or any words from something you copied earlier) and pick
-  the entry.
-- **Enter pastes it directly into the app you were just using** — no
-  switch, no Ctrl+V. This is the everyday magic: copy from here, paste
-  from anywhere.
-- Ctrl+K on an entry offers **Copy** (the classical behavior), **Pin**
-  (keeps it from being pushed out), and **Delete**.
-
-Clipboard history can be turned off in Settings. On Linux it requires
-the GTK host, which records changes while Fulcrum is running.
-
-### Snippets
-
-A snippet is a piece of text you keep under a keyword: your address, a
-bank account, the standard reply to a meeting invite.
-
-Create one without leaving the launcher:
+Store a piece of text under a keyword, then type that keyword in any
+app and Fulcrum replaces it with the full text — automatically, in
+place:
 
 ```
 add snippet addr 42 Wall Street, New York
 ```
 
-That's it — the keyword is `addr`, the text is everything after it, and
-the row that appears saves it on Enter. Type the keyword or any part of
-the text to find it again; Enter copies it, Ctrl+K offers **Paste to
-frontmost** and **Delete**. Query `snippets` to list them all.
+Now typing `addr` + space in your email client becomes `42 Wall
+Street, New York`. No shortcuts to remember. Toggle this in
+`settings` → `expansion-enabled` (macOS and Windows only; Linux
+compositors do not allow the required input monitoring).
 
-**Auto-expansion** (macOS and Windows): type the keyword anywhere —
-`addr` followed by a space — and Fulcrum replaces it with the full text
-in place. No shortcuts needed. Toggle it in `settings` →
-`expansion-enabled`; it requires the accessibility permission on macOS.
-Linux is not supported yet (Wayland does not allow the required input
-monitoring).
+Snippets also sync across machines via the [Sync beta](#sync-beta).
 
-Snippets sync with the [Sync beta](#sync-beta).
+### Search the web
 
-### Quicklinks
+| Type | Opens |
+|---|---|
+| `!g rockets` | Google |
+| `!d rockets` | DuckDuckGo |
+| `!gh rivet` | GitHub |
+| `!so segfault` | Stack Overflow |
+| `!w saturn` | Wikipedia |
+| `!yt lofi` | YouTube |
+| `!m Eiffel Tower` | Google Maps |
+| `!t fulcrum` | X/Twitter |
 
-A quicklink is a bookmark with a keyword claim. Create one inline:
+Anything not matched elsewhere gets a general web search as the last
+result.
+
+### Create quicklinks
+
+Save a URL template with a keyword:
 
 ```
 add link yt https://youtube.com/search?q={query}
 ```
 
-Now `yt lofi hip hop` opens that search. `{query}` in the URL is
-replaced by what you typed after the keyword. Query `quicklinks` to see
-and delete them.
+Now `yt lofi` opens YouTube search. `{query}` is replaced by what you
+type after the keyword. Query `quicklinks` to manage them.
 
-### Web search
+### Manage windows
 
-Fulcrum speaks DuckDuckGo-style bangs:
+Type `window` or parts of a command name. **Left Half**, **Right
+Half**, **Maximize**, **Almost Maximize**, **Center**, **Restore** —
+applied to whatever window was in front before you summoned Fulcrum.
 
-| Type | Opens |
-|---|---|
-| `!g rockets` | Google search |
-| `!d rockets` | DuckDuckGo search |
-| `!gh rivet` | GitHub search |
-| `!so segfault` | Stack Overflow search |
-| `!w saturn` | Wikipedia article |
-| `!yt lofi` | YouTube search |
-| `!m eiffel tower` | Google Maps |
-| `!t fulcrum` | X/Twitter search |
+### Find files
 
-Any other text that isn't a match elsewhere offers a general web search
-as the last result (bang `!g` by default, configurable).
-
-### Window management
-
-Type `window` or parts of a command name: **Left Half**, **Right Half**,
-**Maximize**, **Almost Maximize**, **Center**, **Restore**. The command
-tiles whatever window was in front before you summoned Fulcrum. Restore
-undoes the last tiling on that window.
-
-### Find files (macOS)
-
-`find invoice` searches file names through Spotlight. On Windows and
-Linux this feature honestly reports that it needs the platform search
-index rather than pretending to search.
+`find invoice` searches file names through Spotlight (macOS). On
+Windows and Linux this honestly reports that it needs the platform
+search index.
 
 ### System commands
 
-Type `lock`, `sleep`, or `restart` to lock the screen, suspend, or
-reboot — Fulcrum offers only the commands that exist on your platform.
+`lock`, `sleep`, `restart`, `shut down`, `log out`, `toggle dark mode`,
+`empty trash` — Fulcrum offers only the commands that exist on your
+platform.
+
+### Search emoji
+
+Type two or more letters of an emoji's English name — `grin`, `fire`,
+`heart` — and matching emoji appear inline. <kbd>Enter</kbd> pastes the
+character directly into the app you came from.
+<kbd>Ctrl</kbd>+<kbd>K</kbd> copies it instead.
+
+---
 
 ## AI (bring your own key)
 
-Fulcrum's AI is "BYOK": you use your own API key from OpenAI,
-Anthropic, or a local Ollama. Fulcrum charges nothing and sees nothing —
-the key stays in a local file that is never synced, and the prompt only
-leaves your machine when you run an AI command.
+Fulcrum's AI uses your own API key from OpenAI, Anthropic, or a local
+Ollama. Fulcrum charges nothing, sees nothing, and stores nothing —
+the key stays in a local file that is never synced. Your prompts only
+leave your machine when you run an AI command.
 
-Setup, once:
+### Setup (once)
 
-1. Query `settings`, run the `ai-provider` row until it shows your
-   provider (`openai`, `anthropic`, or `ollama`).
-2. Type `ai key sk-…` (your actual key) and press Enter. For Ollama no
-   key is needed — just have `ollama serve` running.
+1. Type `settings`, run the `ai-provider` row until it shows your
+   provider.
+2. Type `ai key sk-…` with your actual key and press Enter.
+3. Ollama needs no key — just have `ollama serve` running.
 
-Use it:
+### Using AI
 
-- `ai summarize` — summarize whatever is on your clipboard.
-- `ai clean` — fix grammar and spelling of the clipboard text.
-- `ai translate zh` — translate the clipboard into Chinese (or any
-  language).
-- `ai explain` — explain the clipboard content.
-- `ai chat explain kayfabe` — a question that remembers the previous
-  exchanges in this session.
-- Or just ask directly: anything that ends in `?` and is long enough
-  gets an "Ask AI" row automatically.
+| Type | What happens |
+|---|---|
+| `ai summarize` | Summarizes your clipboard |
+| `ai clean` | Fixes grammar and spelling of clipboard text |
+| `ai translate zh` | Translates clipboard into Chinese (or any language) |
+| `ai explain` | Explains the clipboard content |
+| `ai chat explain X` | A question that remembers previous exchanges |
+| `what is entropy?` | Any question ending in `?` gets an AI row automatically |
 
-The answer **streams into the panel as it is generated** — you can read
-while it thinks — and lands on the clipboard when finished. Esc
-dismisses it; Ctrl+K on the last-answer row (`ai`) can paste it straight
-into the app you were using.
+Answers **stream into the panel as they are generated** — you can read
+while the model thinks — and land on your clipboard when done.
+
+### Memory and control
+
+Your conversation history **survives restarts** (stored locally,
+never synced). The AI remembers context across sessions within the
+same provider.
+
+- `ai undo` — drop the last exchange and try a different direction
+- `ai reset` — clear the conversation and start fresh
+- `ai persona you are a concise technical writer` — persistent
+  personality, applied to every request
+- `ai model gpt-4o` — switch models without leaving the launcher
+
+---
 
 ## Plugins
 
-Plugins extend Fulcrum in any language that can print JSON — the bundled
-gallery ships eleven real ones: unit conversion (`u`), Unix timestamps
-(`ts`), regular expressions (`re`), timezones (`tz`), GitHub repo search
-(`gh`), crates.io (`crate`), Homebrew (`brew`), Docker images (`dk`),
-winget (`winget`), Bitwarden (`bw`), and currency conversion (`cur`).
+Plugins extend Fulcrum in any language that can print JSON. The
+bundled gallery ships eleven:
+
+| Plugin | Keyword | What it does |
+|---|---|---|
+| Epoch | `ts` | Unix timestamp ↔ date |
+| Unit | `u` | Unit conversion (length, weight, temp…) |
+| Regex | `re` | Regular expression testing |
+| Timezone | `tz` | Timezone conversion |
+| GitHub | `gh` | Repository search |
+| Cargo | `crate` | crates.io package search |
+| Homebrew | `brew` | Formula search |
+| Docker | `dk` | Container and image search |
+| winget | `winget` | Windows package search |
+| Bitwarden | `bw` | Password vault items |
+| Currency | `cur` | Exchange rate conversion |
 
 - Query `gallery` to see everything; Enter installs or uninstalls.
-- Query `plugins` to see what is installed and toggle each one off/on.
-- Query `plugins <name>` for a plugin's detail page: every command with
-  a copyable example.
-- `install plugin /path/to/folder` installs a plugin from any folder —
-  see [docs/plugins.md](plugins.md) to write one. A plugin is one
-  manifest and one script; Python is enough.
+- Query `plugins` to toggle each one on/off.
+- Query `plugins <name>` for the detail page.
+- `install plugin /path/to/folder` installs from any directory.
+- `plugin set <id> <pref> <value>` configures plugin preferences.
+
+Write your own plugin: one manifest + one script. See
+[docs/plugins.md](plugins.md) — Python is enough.
+
+---
 
 ## Settings
 
-Query `settings` and run a row to change it — each row cycles through
-its valid values:
+Query `settings` and run a row to change it:
 
-- **language** — UI language (zh/en; update dialogs follow it).
-- **theme** — system / light / dark. The panel follows it immediately.
-- **hotkey** — cycles through `alt+space`, `ctrl+alt+space`,
-  `ctrl+shift+space`, `alt+shift+space`. If a combo is taken on your
-  machine, Fulcrum falls back and tells you.
-- **max-results** — how many rows the list shows.
-- **clipboard-enabled** — record clipboard history on/off.
-- **web-search-enabled** — offer web-search rows on/off.
-- **plugins-enabled** — load plugins on/off.
-- **ai-provider** — see the AI section.
+| Setting | What it does |
+|---|---|
+| language | UI language (zh / en) |
+| theme | system / light / dark — applies instantly |
+| hotkey | Cycles: `alt+space` → `ctrl+alt+space` → `ctrl+shift+space` → `alt+shift+space` |
+| max-results | Rows shown (5–25) |
+| clipboard-enabled | Clipboard history on/off |
+| expansion-enabled | Snippet auto-expansion on/off |
+| web-search-enabled | Web search rows on/off |
+| plugins-enabled | Plugin loading on/off |
+| ai-provider | OpenAI / Anthropic / Ollama / off |
 
-Power users can edit `settings.json` directly (its location is shown by
-querying `settings` and running the reveal row, or in
-`FULCRUM_DATA_DIR`). The hotkey accepts any spec of the form
-`mod+key` — modifiers `alt/ctrl/shift/cmd/win/super` (at least one) and
-a key from: `space`, `a`–`z`, `0`–`9`, `f1`–`f12`, `comma`, `period`,
-`minus`, `equal`, `tab`. The same spec works on all three platforms.
+For custom values (hotkey, model, sync root), type them directly:
+
+```
+plugin set docker host tcp://192.168.1.20:2375
+ai model gpt-4o
+```
+
+Or edit `settings.json` in the data directory.
+
+---
 
 ## Updates
 
-Query `update` and run **Check for updates now**. When a new version is
-available the download runs in the background with live progress.
-On macOS, Fulcrum swaps itself and relaunches; on Windows and Linux the
-downloaded installer is revealed with honest manual-step guidance.
-Updates are signed; a failed verification is refused, never installed.
+Query `update` → **Check for updates now**. Downloads run in the
+background; macOS swaps itself and relaunches. Updates are Ed25519
+signed — a failed verification is refused, never installed.
+
+---
 
 ## Sync beta
 
-If you use iCloud Drive, Dropbox, Syncthing, or any folder-syncing
-service, set `sync-root` (via `settings.json` or the `FULCRUM_SYNC_DIR`
-environment variable) to a folder inside your synced drive. Your
-settings and snippets mirror there, so a new or wiped machine restores
-itself on first launch. Clipboard history and AI keys deliberately do
-**not** sync.
+Point `sync-root` (in `settings.json`, or `FULCRUM_SYNC_DIR`) at a
+folder inside iCloud Drive, Dropbox, Syncthing, or any sync service.
+Settings and snippets mirror there; a new machine restores itself on
+first launch. Clipboard history and AI keys deliberately do **not**
+sync.
+
+---
+
+## Privacy
+
+| Data | Where it lives | Leaves your device? |
+|---|---|---|
+| Search history | Never stored | Never |
+| Clipboard history | Local JSON file | Never |
+| Snippets | Local JSON file (+ sync mirror if configured) | Only to your own cloud folder |
+| AI prompts | Nowhere (in-transit only) | Only to the AI provider you chose |
+| AI conversation | Local JSON file | Never |
+| API keys | Local file | Never |
+| Telemetry | None | Nothing to send |
+
+Fulcrum makes exactly three kinds of network requests: update checks
+(signed, throttled), web searches you explicitly run, and AI prompts
+you explicitly run.
+
+---
 
 ## Keyboard reference
 
-| Key | Action |
-|---|---|
-| `Alt+Space` (default) | Show / hide the panel |
-| type | Search everything |
-| `↑` / `↓` | Move selection |
-| `Enter` | Run the selected result (clipboard rows paste) |
-| `Ctrl+K` / `⌘K` | Secondary actions for the selection |
-| `Esc` | Dismiss: actions → AI answer → query text → panel |
+| Key | Context | Action |
+|---|---|---|
+| `Alt+Space` | Everywhere | Show / hide panel |
+| type | Panel | Search everything |
+| `↑` `↓` | Panel | Move selection |
+| `Enter` | Result selected | Run it (clipboard = paste; emoji = insert; file = open) |
+| `Ctrl+K` / `⌘K` | Result selected | Show secondary actions |
+| `Tab` | Result selected | Autocomplete title into query |
+| `Esc` | Panel | Dismiss: actions → detail → AI → query text → hide |
+
+---
+
+## Coming from Raycast?
+
+Here is what transfers, what is different, and why:
+
+**The same:** the hotkey → type → Enter loop. App launching. Clipboard
+history. Snippets. Quicklinks. Calculator. Window management. File
+search (macOS). Web search. System commands. Extensions (plugins).
+Themes. Dark mode.
+
+**Different by design:**
+
+- **Free, no account.** Fulcrum has no Pro tier, no login, no account
+  system. Everything on this page is free, forever.
+- **Cross-platform, equally.** macOS, Windows, and Linux get the same
+  features, same keyboard, same native UI. Not one first-class platform
+  and two afterthoughts.
+- **BYOK AI, no subscription.** Use your own API key. No monthly fee,
+  no per-query cost, no data through Fulcrum's servers.
+- **Local-first.** Your data never leaves your device unless you
+  explicitly ask it to (AI prompt, web search). No cloud account
+  required for sync — use any folder-syncing service you already have.
+- **Plugins in any language.** Raycast requires TypeScript. Fulcrum
+  accepts any program that reads stdin and writes JSON — Python, Go,
+  Rust, a shell script.
+- **Focused, not bloated.** Fulcrum does launcher things well and
+  doesn't try to be a window manager, a note-taking app, or an AI
+  chatbot. When we add AI features, they solve launcher problems.
+
+**Not yet (honest list):** the extension ecosystem is young (11
+built-in plugins vs. Raycast's thousands); clipboard history is text
+only (no images); file search is macOS only; snippet auto-expansion
+does not work on Linux.
+
+---
 
 ## Troubleshooting
 
 - **The hotkey does nothing.** Another app owns that combo. Fulcrum
-  falls back to `Ctrl+Alt+Space` and says so in the status bar; you can
-  also open Fulcrum from the tray icon (Windows), the menu bar (macOS),
-  or `fulcrum --toggle` (Linux).
-- **Paste-to-frontmost does nothing on macOS.** Fulcrum needs the
-  Accessibility permission to send the keystroke: System Settings →
-  Privacy & Security → Accessibility → enable Fulcrum. The window
-  management commands use the same permission.
-- **Paste-to-frontmost on Linux.** Works out of the box on X11. On
-  Wayland, install `wtype` (compositors do not allow apps to inject
-  input directly — that is a feature, and Fulcrum respects it).
-- **Linux (Wayland): the hotkey.** Wayland compositors forbid
-  application-side global key grabs, so Fulcrum registers its shortcut
-  through the desktop portal instead: on the first launch a compositor
-  dialog asks you to confirm "Summon Fulcrum" (ALT+Space by default —
-  the compositor may offer a different key; what it says is final).
-  Requires a portal-capable desktop (GNOME 48+, KDE Plasma 6+); check
-  your session with `echo $XDG_SESSION_TYPE`. On older Wayland
-  compositors, bind your own shortcut to `fulcrum --toggle` (GNOME:
-  Settings → Keyboard → Custom Shortcuts; KDE: System Settings →
-  Shortcuts). For background residency after login, add an autostart
-  entry: `~/.config/autostart/fulcrum.desktop` with
-  `Exec=/path/to/fulcrum` — the app starts hidden and stays resident;
-  `fulcrum --toggle` shows it. Closing the panel window hides it, it
-  does not quit.
-- **AI says "no API key".** Run `ai key <secret>` after picking the
-  provider in settings. Ollama needs no key, only `ollama serve`
-  running.
-- **Clipboard history is empty on Linux.** Entries are recorded while
-  Fulcrum is running; the panel only shows what was captured since
-  launch.
-- **Where is my data?** Everything lives in one data directory
-  (`FULCRUM_DATA_DIR`): stores as JSON, keys in `ai-keys.json`. Delete
-  it and Fulcrum starts clean.
+  falls back to `Ctrl+Alt+Space` and tells you. You can also open
+  Fulcrum from the tray icon (Windows), the menu bar (macOS), or
+  `fulcrum --toggle` (Linux).
 
-## Privacy
+- **Paste-to-frontmost does nothing on macOS.** Grant Accessibility:
+  System Settings → Privacy & Security → Accessibility → enable
+  Fulcrum.
 
-Search, history, and snippets never leave your device. There is no
-telemetry. The only network requests Fulcrum makes are: the update
-check you trigger (or the throttled silent one, against the signed
-release feed), the web searches you explicitly run, and the AI prompts
-you explicitly run — sent only to the provider you configured, with
-your key.
+- **Paste-to-frontmost on Linux.** X11 works out of the box. On
+  Wayland, install `wtype`.
+
+- **The AI says "no API key".** Run `ai key <secret>` after picking
+  the provider. Ollama needs no key, just `ollama serve` running.
+
+- **The hotkey combo I want is taken.** Cycle through presets in
+  `settings` → `hotkey`, or edit `settings.json` — Fulcrum accepts any
+  `mod+key` spec.
+
+- **Where is my data?** One directory (`FULCRUM_DATA_DIR`): stores as
+  JSON, keys in `ai-keys.json`. Delete it and Fulcrum starts clean.
+
+---
+
+## Why Fulcrum?
+
+A launcher is a tool you use hundreds of times a day. It should be
+fast, private, and yours.
+
+Fulcrum is built on [Rivet](https://rivet.jrtx.site): one Racket brain
+embedded in each platform's native UI — SwiftUI on macOS, WinUI 3 on
+Windows, GTK4 on Linux. Not Electron. Not a web wrapper. The Windows
+app is a Windows app; the macOS app is a macOS app.
+
+We are a latecomer. That means we studied what Raycast users complain
+about — AI features prioritised over core stability, complexity
+creep, Pro-tier gating — and made different choices. Fulcrum
+prioritises fundamentals: fast search, reliable actions, honest
+errors, and your data staying on your machine.
+
+Source-available (BUSL-1.1, MIT after the change date). Plugin
+protocol MIT. No telemetry. No account. No cloud.
