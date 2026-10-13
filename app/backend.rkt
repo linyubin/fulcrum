@@ -213,7 +213,7 @@
 ;; cycles or toggles the value and notifies the new one.
 
 (define managed-setting-keys
-  '(language theme hotkey max-results clipboard-enabled web-search-enabled plugins-enabled ai-provider))
+  '(language theme hotkey max-results clipboard-enabled expansion-enabled web-search-enabled plugins-enabled ai-provider))
 
 (define max-results-cycle '(8 12 16 20 25))
 
