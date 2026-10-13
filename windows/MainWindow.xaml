@@ -8,6 +8,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -15,16 +16,20 @@
         <TextBox
             x:Name="QueryBox"
             Grid.Row="0"
-            Margin="12,12,12,4"
+            Margin="14,14,14,6"
             PlaceholderText="Search apps, clipboard, snippets, the web…"
             IsSpellCheckEnabled="False"
             TextChanged="QueryBox_TextChanged"
-            KeyDown="QueryBox_KeyDown" />
+            KeyDown="QueryBox_KeyDown"
+            CornerRadius="6"
+            Background="{ThemeResource ControlFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+            FontSize="14" />
 
         <InfoBar
             x:Name="StatusBar"
             Grid.Row="1"
-            Margin="12,0,12,0"
+            Margin="14,0,14,0"
             IsOpen="True"
             IsClosable="False"
             Severity="Informational"
@@ -33,36 +38,39 @@
         <StackPanel
             x:Name="AiPanel"
             Grid.Row="2"
-            Margin="12,6,12,4"
-            Spacing="4"
+            Margin="14,6,14,4"
+            Spacing="6"
             Visibility="Collapsed">
             <TextBlock
                 x:Name="AiPhase"
                 Text="AI is answering…"
                 FontSize="12"
                 FontWeight="SemiBold"
-                Opacity="0.7" />
+                Foreground="{ThemeResource SystemAccentColor}"
+                Opacity="0.8" />
             <ScrollViewer MaxHeight="170" VerticalScrollBarVisibility="Auto">
                 <TextBlock
                     x:Name="AiText"
                     TextWrapping="Wrap"
                     IsTextSelectionEnabled="True"
-                    FontSize="13" />
+                    FontSize="13"
+                    LineHeight="20" />
             </ScrollViewer>
         </StackPanel>
 
         <StackPanel
             x:Name="DetailPanel"
             Grid.Row="2"
-            Margin="12,6,12,4"
-            Spacing="4"
+            Margin="14,6,14,4"
+            Spacing="6"
             Visibility="Collapsed">
             <TextBlock
                 x:Name="DetailHeader"
                 Text="Details"
                 FontSize="12"
                 FontWeight="SemiBold"
-                Opacity="0.7" />
+                Foreground="{ThemeResource SystemAccentColor}"
+                Opacity="0.8" />
             <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="6">
                     <TextBlock
@@ -73,9 +81,7 @@
                     <ItemsControl x:Name="DetailMetadata">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding}" FontSize="11" FontWeight="SemiBold" Opacity="0.7" />
-                                </StackPanel>
+                                <TextBlock Text="{Binding}" FontSize="11" Opacity="0.6" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -85,26 +91,45 @@
 
         <ListView
             x:Name="ResultsList"
-            Grid.Row="3"
-            Margin="4,4,4,0"
+            Grid.Row="4"
+            Margin="6,4,6,0"
             SelectionMode="Single"
             IsItemClickEnabled="True"
             ItemClick="ResultsList_ItemClick">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="MinHeight" Value="0"/>
+                    <Setter Property="CornerRadius" Value="6"/>
+                    <Setter Property="Margin" Value="4,1,4,1"/>
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="x:String">
-                    <StackPanel Margin="8,6,8,6" Spacing="2">
-                        <TextBlock Text="{Binding}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
-                    </StackPanel>
+                    <Grid Margin="12,8,12,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Text="{Binding}"
+                            TextWrapping="NoWrap"
+                            TextTrimming="CharacterEllipsis"
+                            FontSize="13"
+                            FontWeight="Medium"
+                            VerticalAlignment="Center"/>
+                    </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
 
         <TextBlock
             x:Name="HintBar"
-            Grid.Row="4"
-            Margin="12,4,12,8"
-            Opacity="0.55"
-            FontSize="12"
-            Text="↑↓ navigate · ↵ run · esc hide — Fulcrum" />
+            Grid.Row="5"
+            Margin="14,4,14,8"
+            Opacity="0.45"
+            FontSize="11"
+            Text="↑↓ navigate · ↵ run · ctrl+k actions · esc hide — Fulcrum" />
     </Grid>
 </Window>
