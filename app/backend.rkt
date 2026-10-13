@@ -182,15 +182,31 @@
 (define backend-surface-words
   '("ai" "settings" "quicklinks" "links" "gallery" "plugins" "update" "updates"))
 
+(define (settings-quick-rows)
+  (for/list ([key (in-list '(theme hotkey language ai-provider))])
+    (define val (settings-get (settings!) key))
+    (define label
+      (case key
+        [(theme) "Theme"]
+        [(hotkey) "Hotkey"]
+        [(language) "Language"]
+        [(ai-provider) "AI Provider"]
+        [else (format "~a" key)]))
+    (list "settings.set"
+          (format "~a  ·  ~a" label val)
+          "↵ cycles to the next value"
+          "Setting"
+          (symbol->string key)
+          "setting" "" ""
+          (format "~a" val))))
+
 (define (rows-for engine query)
   (define rows (engine-search engine query))
   ;; Discoverability: an empty query always shows a Settings row so the
   ;; user can find the settings without knowing to type "settings".
   (define settings-entry
     (if (string=? (string-trim query) "")
-        (list (list "noop" "⚙ Settings"
-                    "type settings to configure theme, hotkey, AI, plugins…"
-                    "Setting" "" "setting" "" ""))
+        (settings-quick-rows)
         '()))
   (define filtered
     (if (settings-get (settings!) 'web-search-enabled)
