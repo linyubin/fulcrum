@@ -26,7 +26,7 @@
 
 (struct settings-entry (key value description) #:transparent)
 
-(struct settings-manager (store schema) #:transparent)
+(struct settings-manager (store schema path) #:transparent)
 
 ;; The hotkey grammar all three hosts parse: one or more modifiers
 ;; (alt/ctrl/shift/cmd/win/super) then the key — space, a letter, a digit,
@@ -124,7 +124,7 @@
   ;; (or an explicit override) beats the stored setting: the setting lives
   ;; in the file that restore would bring back.
   (sync-restore! path (or override (sync-root-override) (peek-sync-root path)))
-  (settings-manager (rivet:make-settings-store path) schema))
+  (settings-manager (rivet:make-settings-store path) schema path))
 
 (define/contract (settings-get manager key)
   (-> settings-manager? symbol? any/c)
@@ -149,7 +149,7 @@
   ;; Mirror the whole file after every successful write. Reading the root
   ;; back through the typed manager also means a mid-session sync-root
   ;; change takes effect from the very next write.
-  (sync-mirror! (settings-path)
+  (sync-mirror! (settings-manager-path manager)
                 (or (sync-root-override) (settings-get manager 'sync-root)))
   #t)
 
