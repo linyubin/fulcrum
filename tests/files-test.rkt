@@ -15,15 +15,15 @@
 
 (test-case "mdfind output parsing filters junk and dedupes"
   (define parsed
-    (parse-mdfind-output
+    (parse-paths
      "/Users/me/Reports/q3.md\n/Users/me/Reports/q3.md\nnot a path\n/Users/me/Notes.md\n"))
   (check-equal? (length parsed) 2)
   (check-equal? (car (car parsed)) "q3.md")
   (check-equal? (cdr (car parsed)) "/Users/me/Reports/q3.md")
   ;; Non-string input (a timed-out probe) yields no rows.
-  (check-equal? (parse-mdfind-output #f) '())
+  (check-equal? (parse-paths #f) '())
   ;; The limit holds.
-  (check-equal? (length (parse-mdfind-output "/a/1\n/a/2\n/a/3\n/a/4\n" 3)) 3))
+  (check-equal? (length (parse-paths "/a/1\n/a/2\n/a/3\n/a/4\n" 3)) 3))
 
 (test-case "engine provider: honest row without Spotlight, real rows with it"
   (define engine (make-engine #:clipboard-store #f
