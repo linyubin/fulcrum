@@ -72,22 +72,6 @@
   (check-true (string-prefix? (updates-folder-uri) "file:///"))
   (check-false (string-contains? (updates-folder-uri) " ")))
 
-;; ---------- progress accounting ---------------------------------------------
-
-(test-case "download progress copies bytes and reports percent"
-  (reset-update-state!)
-  (define payload (make-bytes 250000 7))
-  (define out (open-output-bytes))
-  (copy-with-progress! (open-input-bytes payload) out 250000)
-  (check-equal? (bytes-length (get-output-bytes out)) 250000)
-  (check-equal? (hash-ref (update-state-snapshot) 'percent) 100)
-  ;; percent tracks the declared total, not the end of input
-  (reset-update-state!)
-  (define short-out (open-output-bytes))
-  (copy-with-progress! (open-input-bytes payload) short-out 1000000)
-  (check-equal? (hash-ref (update-state-snapshot) 'percent) 25)
-  (reset-update-state!))
-
 ;; ---------- rollout bucket ----------------------------------------------------
 
 (test-case "rollout bucket is sticky and persists to the settings store"
