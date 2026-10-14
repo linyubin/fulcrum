@@ -6,11 +6,25 @@ independently per platform packaging run.
 
 ## [0.10.1] - 2026-10-14
 
-Engineering-alignment patch — no feature changes. The hosts consume
-Rivet as a package library (rivet v0.11.0) instead of compiling its
-sources, the update rollout bucket draws from cryptographic randomness,
-and the website joins the family design system (dark theme, Chinese
-default).
+Engineering-alignment patch — no feature changes to the launcher
+itself. The hosts consume Rivet as a package library (rivet v0.11.0)
+instead of compiling its sources, the update rollout bucket draws from
+cryptographic randomness, the website joins the family design system
+(dark theme, Chinese default), and the site gains a bilingual user
+manual.
+
+### Added
+
+- **User manual at fulcrum.jrtx.site/guide.html** — a bilingual
+  (Chinese default, English via the shared nav switcher) web manual
+  following the family manual pattern: a five-minute start (install →
+  summon → first command/snippet → paste back into the frontmost app),
+  the core features (search, clipboard history, snippets, AI key setup,
+  window & system commands, hotkey customization), and a FAQ covering
+  the real stumbling blocks — macOS Accessibility grants, where data
+  lives, accounts, platform differences, language & theme, failed
+  updates, uninstall. Illustrated with real screenshots of the macOS
+  panel in light and dark themes; the site nav gains a "Manual" entry.
 
 ### Changed
 

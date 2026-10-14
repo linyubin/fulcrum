@@ -7,7 +7,7 @@ public enum RivetGeneratedConfig {
     public static let moduleName = "backend"
     public static let entryName = "start"
     public static let displayName = "Fulcrum"
-    public static let version = "0.10.0"
+    public static let version = "0.10.1"
     public static let build: Int64 = 10
     public static let identifier = "site.jrtx.fulcrum"
     public static let releaseChannel = "stable"
@@ -124,126 +124,126 @@ public struct RivetAPI: Sendable {
     public init(client: RivetClient) { self.client = client }
 
     public func clipboard_clear() async throws -> Int64 {
-        let result = try await client.call("clipboard-clear", arguments: [])
-        return try decode_Int64(result)
+        let rivetResult = try await client.call("clipboard-clear", arguments: [])
+        return try decode_Int64(rivetResult)
     }
     public func clipboard_history(query: String) async throws -> [[String]] {
-        let result = try await client.call("clipboard-history", arguments: [encode_String(query)])
-        return try decode__List_List_String_(result)
+        let rivetResult = try await client.call("clipboard-history", arguments: [encode_String(query)])
+        return try decode__List_List_String_(rivetResult)
     }
     public func clipboard_record(text: String) async throws -> String {
-        let result = try await client.call("clipboard-record", arguments: [encode_String(text)])
-        return try decode_String(result)
+        let rivetResult = try await client.call("clipboard-record", arguments: [encode_String(text)])
+        return try decode_String(rivetResult)
     }
     public func health() async throws -> String {
-        let result = try await client.call("health", arguments: [])
-        return try decode_String(result)
+        let rivetResult = try await client.call("health", arguments: [])
+        return try decode_String(rivetResult)
     }
     public func index_rebuild() async throws -> Int64 {
-        let result = try await client.call("index-rebuild", arguments: [])
-        return try decode_Int64(result)
+        let rivetResult = try await client.call("index-rebuild", arguments: [])
+        return try decode_Int64(rivetResult)
     }
     public func plugin_detail(row_id: String, arg: String) async throws -> RivetTypes.DetailView {
-        let result = try await client.call("plugin-detail", arguments: [encode_String(row_id), encode_String(arg)])
-        return try decode_DetailView(result)
+        let rivetResult = try await client.call("plugin-detail", arguments: [encode_String(row_id), encode_String(arg)])
+        return try decode_DetailView(rivetResult)
     }
     public func plugins_list() async throws -> [[String]] {
-        let result = try await client.call("plugins-list", arguments: [])
-        return try decode__List_List_String_(result)
+        let rivetResult = try await client.call("plugins-list", arguments: [])
+        return try decode__List_List_String_(rivetResult)
     }
     public func plugins_reload() async throws -> Void {
-        let result = try await client.call("plugins-reload", arguments: [])
-        return try decode_Void(result)
+        let rivetResult = try await client.call("plugins-reload", arguments: [])
+        return try decode_Void(rivetResult)
     }
     public func row_actions(id: String, arg: String) async throws -> [[String]] {
-        let result = try await client.call("row-actions", arguments: [encode_String(id), encode_String(arg)])
-        return try decode__List_List_String_(result)
+        let rivetResult = try await client.call("row-actions", arguments: [encode_String(id), encode_String(arg)])
+        return try decode__List_List_String_(rivetResult)
     }
     public func run_action(id: String, arg: String) async throws -> String {
-        let result = try await client.call("run-action", arguments: [encode_String(id), encode_String(arg)])
-        return try decode_String(result)
+        let rivetResult = try await client.call("run-action", arguments: [encode_String(id), encode_String(arg)])
+        return try decode_String(rivetResult)
     }
     public func search(query: String) async throws -> [[String]] {
-        let result = try await client.call("search", arguments: [encode_String(query)])
-        return try decode__List_List_String_(result)
+        let rivetResult = try await client.call("search", arguments: [encode_String(query)])
+        return try decode__List_List_String_(rivetResult)
     }
     public func settings_list() async throws -> [[String]] {
-        let result = try await client.call("settings-list", arguments: [])
-        return try decode__List_List_String_(result)
+        let rivetResult = try await client.call("settings-list", arguments: [])
+        return try decode__List_List_String_(rivetResult)
     }
     public func settings_set(key: String, value: String) async throws -> Bool {
-        let result = try await client.call("settings-set", arguments: [encode_String(key), encode_String(value)])
-        return try decode_Bool(result)
+        let rivetResult = try await client.call("settings-set", arguments: [encode_String(key), encode_String(value)])
+        return try decode_Bool(rivetResult)
     }
     public func snippet_delete(id: String) async throws -> Bool {
-        let result = try await client.call("snippet-delete", arguments: [encode_String(id)])
-        return try decode_Bool(result)
+        let rivetResult = try await client.call("snippet-delete", arguments: [encode_String(id)])
+        return try decode_Bool(rivetResult)
     }
     public func snippet_list() async throws -> [[String]] {
-        let result = try await client.call("snippet-list", arguments: [])
-        return try decode__List_List_String_(result)
+        let rivetResult = try await client.call("snippet-list", arguments: [])
+        return try decode__List_List_String_(rivetResult)
     }
     public func snippet_save(id: String, name: String, keyword: String, text: String) async throws -> String {
-        let result = try await client.call("snippet-save", arguments: [encode_String(id), encode_String(name), encode_String(keyword), encode_String(text)])
-        return try decode_String(result)
+        let rivetResult = try await client.call("snippet-save", arguments: [encode_String(id), encode_String(name), encode_String(keyword), encode_String(text)])
+        return try decode_String(rivetResult)
     }
     public func update_check(manual: Bool) async throws -> RivetTypes.UpdateCheck {
-        let result = try await client.call("update-check", arguments: [encode_Bool(manual)])
-        return try decode_UpdateCheck(result)
+        let rivetResult = try await client.call("update-check", arguments: [encode_Bool(manual)])
+        return try decode_UpdateCheck(rivetResult)
     }
     public func update_download() async throws -> Void {
-        let result = try await client.call("update-download", arguments: [])
-        return try decode_Void(result)
+        let rivetResult = try await client.call("update-download", arguments: [])
+        return try decode_Void(rivetResult)
     }
     public func update_state() async throws -> RivetTypes.UpdateState {
-        let result = try await client.call("update-state", arguments: [])
-        return try decode_UpdateState(result)
+        let rivetResult = try await client.call("update-state", arguments: [])
+        return try decode_UpdateState(rivetResult)
     }
 
     // Shared state
     public func get_ai_stream() async throws -> RivetTypes.AiStream {
-        let result = try await client.getState("ai-stream")
-        return try decode_AiStream(result)
+        let rivetResult = try await client.getState("ai-stream")
+        return try decode_AiStream(rivetResult)
     }
     @discardableResult
     public func set_ai_stream(_ value: RivetTypes.AiStream) async throws -> RivetTypes.AiStream {
-        let result = try await client.setState("ai-stream", value: encode_AiStream(value))
-        return try decode_AiStream(result)
+        let rivetResult = try await client.setState("ai-stream", value: encode_AiStream(value))
+        return try decode_AiStream(rivetResult)
     }
     public func get_hotkey() async throws -> String {
-        let result = try await client.getState("hotkey")
-        return try decode_String(result)
+        let rivetResult = try await client.getState("hotkey")
+        return try decode_String(rivetResult)
     }
     @discardableResult
     public func set_hotkey(_ value: String) async throws -> String {
-        let result = try await client.setState("hotkey", value: encode_String(value))
-        return try decode_String(result)
+        let rivetResult = try await client.setState("hotkey", value: encode_String(value))
+        return try decode_String(rivetResult)
     }
     public func get_search_revision() async throws -> Int64 {
-        let result = try await client.getState("search-revision")
-        return try decode_Int64(result)
+        let rivetResult = try await client.getState("search-revision")
+        return try decode_Int64(rivetResult)
     }
     @discardableResult
     public func set_search_revision(_ value: Int64) async throws -> Int64 {
-        let result = try await client.setState("search-revision", value: encode_Int64(value))
-        return try decode_Int64(result)
+        let rivetResult = try await client.setState("search-revision", value: encode_Int64(value))
+        return try decode_Int64(rivetResult)
     }
     public func get_theme() async throws -> String {
-        let result = try await client.getState("theme")
-        return try decode_String(result)
+        let rivetResult = try await client.getState("theme")
+        return try decode_String(rivetResult)
     }
     @discardableResult
     public func set_theme(_ value: String) async throws -> String {
-        let result = try await client.setState("theme", value: encode_String(value))
-        return try decode_String(result)
+        let rivetResult = try await client.setState("theme", value: encode_String(value))
+        return try decode_String(rivetResult)
     }
     public func get_version() async throws -> String {
-        let result = try await client.getState("version")
-        return try decode_String(result)
+        let rivetResult = try await client.getState("version")
+        return try decode_String(rivetResult)
     }
     @discardableResult
     public func set_version(_ value: String) async throws -> String {
-        let result = try await client.setState("version", value: encode_String(value))
-        return try decode_String(result)
+        let rivetResult = try await client.setState("version", value: encode_String(value))
+        return try decode_String(rivetResult)
     }
 }

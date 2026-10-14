@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fulcrum 手册 — 一次按键，直达一切。</title>
+    <meta name="description" content="Fulcrum 用户手册：五分钟上手、剪贴板历史、片段、AI 密钥配置、热键自定义，以及权限授权、数据存放等常见问题解答。">
+    <link rel="canonical" href="https://fulcrum.jrtx.site/guide.html">
+    <meta name="theme-color" content="#c15f3c">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Fulcrum">
+    <meta property="og:title" content="Fulcrum — User Manual">
+    <meta property="og:description" content="The Fulcrum user manual: a five-minute start, clipboard history, snippets, AI key setup, hotkey customization, and answers to the most common questions.">
+    <meta property="og:url" content="https://fulcrum.jrtx.site/guide.html">
+    <script>
+        // Anti-flash: set the theme before the stylesheet paints — same as
+        // the homepage (localStorage choice, else system preference).
+        (function () {
+            var t;
+            try { t = localStorage.getItem('fulcrum-theme'); } catch (e) {}
+            if (t !== 'dark' && t !== 'light') {
+                t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = t;
+        })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%23c15f3c'/%3E%3Cpath d='M108 404 L404 404' stroke='%23FFFFFF' stroke-width='30' stroke-linecap='round'/%3E%3Cpath d='M256 236 L344 388 L168 388 Z' fill='%23FFFFFF'/%3E%3Cpath d='M132 282 L380 176' stroke='%23FFFFFF' stroke-width='24' stroke-linecap='round'/%3E%3Ccircle cx='398' cy='168' r='30' fill='%23FFFFFF'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preload" href="fonts/newsreader-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/newsreader-latin-var-italic.woff2" as="font" type="font/woff2" crossorigin>
+    <style>
+        /* Fulcrum's per-site accent family (warm copper), re-asserted over
+           the shared stylesheet's neutral defaults — family pattern. */
+        :root {
+            --accent: #c15f3c;
+            --accent-hover: #a94f30;
+            --accent-soft: #f7e5dd;
+            --accent-tint: rgba(193, 95, 60, 0.08);
+            --accent-bright: #d97a55;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Nav -->
+    <nav class="nav-container">
+        <div class="nav-wrapper">
+            <a href="index.html" class="nav-brand">
+                <svg class="nav-logo" width="28" height="28" viewBox="0 0 512 512" fill="none">
+                    <rect width="512" height="512" rx="115" fill="#c15f3c"/>
+                    <path d="M108 404 L404 404" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+                    <path d="M256 236 L344 388 L168 388 Z" fill="#FFFFFF"/>
+                    <path d="M132 282 L380 176" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+                    <circle cx="398" cy="168" r="30" fill="#FFFFFF"/>
+                </svg>
+                Fulcrum
+            </a>
+            <ul class="nav-menu">
+                <li><a href="index.html#features" class="optional" data-i18n="nav.features">功能</a></li>
+                <li><a href="index.html#platforms" class="optional" data-i18n="nav.platforms">平台</a></li>
+                <li><a href="guide.html" style="color:var(--accent)" data-i18n="nav.guide">手册</a></li>
+                <li><a href="https://github.com/turinglambdaai/fulcrum" class="optional">GitHub</a></li>
+                <li class="lang-dropdown-wrapper">
+                    <button class="lang-btn" onclick="void 0">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                        <span id="current-lang-label">简体中文</span>
+                    </button>
+                    <ul class="lang-menu">
+                        <li onclick="setLanguage('en')">English</li>
+                        <li onclick="setLanguage('zh')">简体中文</li>
+                    </ul>
+                </li>
+                <li><button class="theme-btn" id="theme-btn" type="button" aria-label="Toggle theme">◐</button></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="manual-hero">
+        <div class="container">
+            <span class="eyebrow" data-i18n="m.eyebrow">使用手册</span>
+            <h1><span data-i18n="m.h1">Fulcrum 能做的一切，</span><span class="accent" data-i18n="m.h1b">一页说清。</span></h1>
+            <p class="lead" data-i18n="m.lead">从安装到 AI 密钥，从粘贴回前台到热键自定义——还有最常见的几个坑，都在这里。</p>
+        </div>
+    </section>
+
+    <!-- Two-column: TOC + content -->
+    <div class="manual-layout manual-body">
+
+        <!-- Sticky side TOC -->
+        <aside class="manual-toc" id="toc">
+            <div class="manual-toc-group" data-i18n="m.toc-start">上手</div>
+            <a href="#quickstart" data-i18n="m.toc-quickstart">五分钟上手</a>
+
+            <div class="manual-toc-group" data-i18n="m.toc-core">核心功能</div>
+            <a href="#search" data-i18n="m.toc-search">搜索一切</a>
+            <a href="#clipboard" data-i18n="m.toc-clipboard">剪贴板历史</a>
+            <a href="#snippets" data-i18n="m.toc-snippets">片段</a>
+            <a href="#ai" data-i18n="m.toc-ai">AI（自带密钥）</a>
+            <a href="#system" data-i18n="m.toc-system">窗口与系统命令</a>
+            <a href="#hotkey" data-i18n="m.toc-hotkey">热键与设置</a>
+
+            <div class="manual-toc-group" data-i18n="m.toc-faq">常见问题</div>
+            <a href="#faq" data-i18n="m.toc-faq-link">FAQ</a>
+        </aside>
+
+        <!-- Content -->
+        <main>
+
+            <!-- =================== Quick start =================== -->
+            <section class="manual-section" id="quickstart">
+                <h2 class="manual-h2"><span class="h2-emoji">🚀</span>
+                    <span data-i18n="m.qs-title">五分钟上手</span>
+                </h2>
+                <p data-i18n="m.qs-lead">装好、唤起、跑通第一条命令。整份手册其余的部分都是可选的。</p>
+                <ol>
+                    <li data-i18n="m.qs-1"><strong>安装。</strong>到 <a href="https://github.com/turinglambdaai/fulcrum/releases/latest">Releases</a> 页下载最新版：macOS 把 .dmg 里的 Fulcrum 拖进「应用程序」；Windows 双击 .msi 安装；Linux 用 .deb / .rpm / .AppImage。没有账号，没有引导问卷。</li>
+                    <li data-i18n="m.qs-2"><strong>唤起。</strong>按 <kbd>Alt</kbd>+<kbd>Space</kbd>（macOS 是 <kbd>⌥</kbd>+<kbd>Space</kbd>），浮动面板出现在屏幕中央。再按一次，面板隐藏。热键被别的软件占了？Fulcrum 自动退到 <code>Ctrl+Alt+Space</code> 并提示。</li>
+                    <li data-i18n="m.qs-3"><strong>跑第一条命令。</strong>输入 <code>calc</code> 回车——计算器打开。再唤起，输入 <code>128*768</code>——答案就在列表里，回车即复制。存第一个片段：输入 <code>add snippet addr 南京西路 42 号</code>。</li>
+                    <li data-i18n="m.qs-4"><strong>粘贴回前台。</strong>在任意应用里复制一段文字。唤起面板，输入 <code>clip</code> 或那段文字里的任意词，回车——文字直接粘进你刚才在用的应用，不用切窗口。macOS 第一次会请求辅助功能权限，授权一次全局生效（详见 <a href="#faq">FAQ</a>）。</li>
+                </ol>
+                <img src="img/fulcrum-main-light.png"
+                     alt="Fulcrum 启动面板（macOS 浅色主题）：搜索框、应用结果列表与底部键位提示"
+                     data-i18n-alt="shot.main-alt"
+                     class="manual-shot" loading="lazy">
+                <p class="manual-hint" data-i18n="m.qs-hint">截图为真实的 macOS 版本。Windows 与 Linux 面板布局相同，控件随平台风格。</p>
+                <p data-i18n="m.qs-outro">整个产品就是：<strong>一个键 → 输入 → 回车</strong>。下面全是细节。</p>
+            </section>
+
+            <!-- =================== Search =================== -->
+            <section class="manual-section" id="search">
+                <h2 class="manual-h2"><span class="h2-emoji">🔍</span>
+                    <span data-i18n="m.search-title">搜索一切</span>
+                </h2>
+                <p data-i18n="m.search-lead">面板只有一个输入框，但什么都接：应用、算式、文件、网页、表情。</p>
+
+                <h3 class="manual-h3" data-i18n="m.search-apps-h">启动应用</h3>
+                <p data-i18n="m.search-apps">输入应用名的任意片段——<code>ffx</code> 能找到 Firefox，手滑打错也能容忍。常用的应用会越用越靠前。</p>
+
+                <h3 class="manual-h3" data-i18n="m.search-calc-h">行内计算</h3>
+                <p data-i18n="m.search-calc">直接敲算式：<code>128*768</code>、<code>(2+3)^4</code>、<code>sqrt(2)</code>、<code>sin(pi/4)</code>。答案出现在结果最上面，回车复制。</p>
+
+                <h3 class="manual-h3" data-i18n="m.search-bang-h">网页搜索 bang</h3>
+                <table class="syntax-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="m.th-input">输入</th>
+                            <th data-i18n="m.th-opens">打开</th>
+                            <th data-i18n="m.th-input2">输入</th>
+                            <th data-i18n="m.th-opens2">打开</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>!g rockets</code></td><td>Google</td><td><code>!yt lofi</code></td><td>YouTube</td></tr>
+                        <tr><td><code>!d rockets</code></td><td>DuckDuckGo</td><td><code>!m 埃菲尔铁塔</code></td><td data-i18n="m.bang-maps">Google 地图</td></tr>
+                        <tr><td><code>!gh rivet</code></td><td>GitHub</td><td><code>!t fulcrum</code></td><td>X / Twitter</td></tr>
+                        <tr><td><code>!so segfault</code></td><td>Stack Overflow</td><td><code>!w saturn</code></td><td data-i18n="m.bang-wiki">维基百科</td></tr>
+                    </tbody>
+                </table>
+                <p data-i18n="m.search-bang-note">没被别处匹配的普通文字，最后会出现一条通用搜索行（默认 <code>!g</code>，可在设置里换）。</p>
+
+                <h3 class="manual-h3" data-i18n="m.search-quick-h">快捷链接</h3>
+                <p data-i18n="m.search-quick">建立自己的 URL 模板：<code>add link yt https://youtube.com/search?q={query}</code>。之后 <code>yt lofi</code> 就打开 YouTube 搜索，<code>{query}</code> 被替换成关键词后面的内容。输入 <code>quicklinks</code> 查看和删除。</p>
+
+                <h3 class="manual-h3" data-i18n="m.search-file-h">找文件与表情</h3>
+                <p data-i18n="m.search-file"><code>find 发票</code> 通过 Spotlight 搜文件名（macOS）。输入表情英文名的两个以上字母——<code>grin</code>、<code>fire</code>、<code>heart</code>——匹配的表情内联出现，回车直接粘贴。</p>
+            </section>
+
+            <!-- =================== Clipboard =================== -->
+            <section class="manual-section" id="clipboard">
+                <h2 class="manual-h2"><span class="h2-emoji">📋</span>
+                    <span data-i18n="m.clip-title">剪贴板历史</span>
+                </h2>
+                <p data-i18n="m.clip-lead">你复制的每段文字都会被记住——在本机、可搜索、可固定。</p>
+                <ul>
+                    <li data-i18n="m.clip-1"><strong>粘贴。</strong>输入 <code>clip</code> 或历史内容里的任意词，回车——粘贴进你刚才在用的应用。</li>
+                    <li data-i18n="m.clip-2"><strong>复制而非粘贴。</strong>选中某条历史，按 <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd>，从附加动作里选复制。</li>
+                    <li data-i18n="m.clip-3"><strong>开关与容量。</strong><code>settings</code> → <code>clipboard-enabled</code> 总开关；<code>clipboard-limit</code> 控制保留条数。</li>
+                    <li data-i18n="m.clip-4"><strong>隐私。</strong>历史是本地 JSON，从不离开设备。剪贴板只收文本。</li>
+                </ul>
+            </section>
+
+            <!-- =================== Snippets =================== -->
+            <section class="manual-section" id="snippets">
+                <h2 class="manual-h2"><span class="h2-emoji">✂️</span>
+                    <span data-i18n="m.snip-title">片段</span>
+                </h2>
+                <p data-i18n="m.snip-lead">把一段文字存在关键词下面，在任何应用里输入关键词，原地展开。</p>
+                <p data-i18n="m.snip-add">建立片段：</p>
+                <p data-i18n="m.snip-use">在邮件里输入 <code>addr</code> 加空格，就变成 <code>南京西路 42 号</code>。展开是自动的——词边界一触发就替换，不用按任何快捷键。macOS 与 Windows 支持；Linux 的合成器（Wayland）不允许所需的输入监听，故不提供。在 <code>settings</code> → <code>expansion-enabled</code> 随时开关。片段可通过同步 beta 跨机器带走（见 <a href="#faq">FAQ</a>）。</p>
+            </section>
+
+            <!-- =================== AI =================== -->
+            <section class="manual-section" id="ai">
+                <h2 class="manual-h2"><span class="h2-emoji">🤖</span>
+                    <span data-i18n="m.ai-title">AI（自带密钥）</span>
+                </h2>
+                <p data-i18n="m.ai-lead">Fulcrum 不收费、不经手数据。AI 用你自己的 OpenAI、Anthropic 或本地 Ollama。密钥存在本地文件里，永不同步、永不上传——只有你执行 AI 命令时，提示词才发给你选的服务商。</p>
+
+                <h3 class="manual-h3" data-i18n="m.ai-setup-h">一次性设置（最常见的卡点）</h3>
+                <ol>
+                    <li data-i18n="m.ai-setup-1"><strong>选服务商。</strong>唤起面板，输入 <code>settings</code>，回车运行 <code>ai-provider</code> 那行，切到 OpenAI / Anthropic / Ollama。</li>
+                    <li data-i18n="m.ai-setup-2"><strong>填密钥。</strong>再次唤起面板，输入 <code>ai key</code> 加你的真实密钥（例如 <code>ai key sk-…</code>），回车。密钥落在本地，界面不会回显。</li>
+                    <li data-i18n="m.ai-setup-3"><strong>Ollama 用户免密钥。</strong>只要 <code>ollama serve</code> 在本机跑着，选好 provider 直接用。</li>
+                    <li data-i18n="m.ai-setup-4"><strong>验证。</strong>输入 <code>ai 你好</code>——答案流式打进面板，即配置成功。</li>
+                </ol>
+                <div class="callout">
+                    <div class="callout-title">⚠️ <span data-i18n="m.ai-callout-title">提示「没有密钥」？</span></div>
+                    <span data-i18n="m.ai-callout">先选服务商（第 1 步），再填密钥（第 2 步）——顺序反了会报「没有密钥」。换服务商后需重新填一次对应的密钥。</span>
+                </div>
+
+                <h3 class="manual-h3" data-i18n="m.ai-cmd-h">日常用法</h3>
+                <table class="syntax-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="m.th-input">输入</th>
+                            <th data-i18n="m.th-effect">效果</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>ai summarize</code></td><td data-i18n="m.ai-c1">总结剪贴板内容</td></tr>
+                        <tr><td><code>ai clean</code></td><td data-i18n="m.ai-c2">修正剪贴板文本的语法拼写</td></tr>
+                        <tr><td><code>ai translate zh</code></td><td data-i18n="m.ai-c3">翻译剪贴板到中文（或任意语言）</td></tr>
+                        <tr><td><code>ai explain</code></td><td data-i18n="m.ai-c4">解释剪贴板内容</td></tr>
+                        <tr><td><code>ai chat 解释一下 X</code></td><td data-i18n="m.ai-c5">多轮对话，记住前文</td></tr>
+                        <tr><td><code>什么是熵？</code></td><td data-i18n="m.ai-c6">任何以 ？ 结尾的问句自动出现 AI 行</td></tr>
+                    </tbody>
+                </table>
+                <p data-i18n="m.ai-stream">答案<strong>流式打进面板</strong>——模型还在生成你就能开始读——完成后自动进剪贴板。</p>
+
+                <h3 class="manual-h3" data-i18n="m.ai-mem-h">记忆与控制</h3>
+                <p data-i18n="m.ai-mem">对话历史跨重启持久化（仅本地）。<code>ai undo</code> 回退上一轮；<code>ai reset</code> 清空重来；<code>ai persona 你是简洁的技术写作者</code> 设持久人设；<code>ai model gpt-4o</code> 不离开面板切模型。</p>
+            </section>
+
+            <!-- =================== System & windows =================== -->
+            <section class="manual-section" id="system">
+                <h2 class="manual-h2"><span class="h2-emoji">🪟</span>
+                    <span data-i18n="m.sys-title">窗口与系统命令</span>
+                </h2>
+                <p data-i18n="m.sys-win">输入 <code>window</code> 或命令名的一部分：<strong>左半屏、右半屏、最大化、近最大化、居中、还原</strong>——作用于你召唤 Fulcrum 之前最前面的那个窗口。三平台都是原生实现。</p>
+                <p data-i18n="m.sys-cmd"><code>lock</code>、<code>sleep</code>、<code>restart</code>、<code>toggle dark mode</code>、<code>empty trash</code>——Fulcrum 只列出你的平台上真实存在的命令，不会给一个点了没反应的假条目。</p>
+            </section>
+
+            <!-- =================== Hotkey & settings =================== -->
+            <section class="manual-section" id="hotkey">
+                <h2 class="manual-h2"><span class="h2-emoji">⌨️</span>
+                    <span data-i18n="m.hot-title">热键与设置</span>
+                </h2>
+                <p data-i18n="m.hot-lead">输入 <code>settings</code>，回车运行对应的行即可修改：</p>
+                <table class="syntax-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="m.th-setting">设置</th>
+                            <th data-i18n="m.th-meaning">说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>language</code></td><td data-i18n="m.hot-lang">界面语言（zh / en）</td></tr>
+                        <tr><td><code>theme</code></td><td data-i18n="m.hot-theme">system / light / dark，即时生效</td></tr>
+                        <tr><td><code>hotkey</code></td><td data-i18n="m.hot-hotkey">循环切换热键预设</td></tr>
+                        <tr><td><code>max-results</code></td><td data-i18n="m.hot-max">结果列表行数（5–25）</td></tr>
+                        <tr><td><code>clipboard-enabled</code></td><td data-i18n="m.hot-clip">剪贴板历史开关</td></tr>
+                        <tr><td><code>expansion-enabled</code></td><td data-i18n="m.hot-exp">片段自动展开开关</td></tr>
+                        <tr><td><code>web-search-enabled</code></td><td data-i18n="m.hot-web">网页搜索行开关</td></tr>
+                        <tr><td><code>plugins-enabled</code></td><td data-i18n="m.hot-plugins">插件加载开关</td></tr>
+                        <tr><td><code>ai-provider</code></td><td data-i18n="m.hot-ai">AI 服务商</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 class="manual-h3" data-i18n="m.hot-custom-h">自定义热键</h3>
+                <p data-i18n="m.hot-custom"><code>settings</code> → <code>hotkey</code> 在四个预设间循环：<code>alt+space</code> → <code>ctrl+alt+space</code> → <code>ctrl+shift+space</code> → <code>alt+shift+space</code>。想用别的组合：编辑数据目录下的 <code>settings.json</code>，写 <code>"hotkey": "ctrl+shift+space"</code> 这样的值——修饰键 <code>alt/ctrl/shift/cmd/win/super</code> 至少一个，键位 <code>space</code>、<code>a</code>–<code>z</code>、<code>0</code>–<code>9</code>、<code>f1</code>–<code>f12</code>、<code>comma</code>、<code>period</code>、<code>minus</code>、<code>equal</code>、<code>tab</code>。三平台通用。组合被占用时 Fulcrum 自动退避并提示，菜单栏（macOS）或托盘（Windows）里也永远有 Open Fulcrum。</p>
+
+                <h3 class="manual-h3" data-i18n="m.hot-keys-h">键位速查</h3>
+                <table class="syntax-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="m.th-key">按键</th>
+                            <th data-i18n="m.th-action">动作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><kbd>Alt</kbd>+<kbd>Space</kbd></td><td data-i18n="m.k1">显示 / 隐藏面板</td></tr>
+                        <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td data-i18n="m.k2">移动选中</td></tr>
+                        <tr><td><kbd>↵</kbd></td><td data-i18n="m.k3">执行（剪贴板 = 粘贴；表情 = 插入；文件 = 打开）</td></tr>
+                        <tr><td><kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd></td><td data-i18n="m.k4">附加动作（复制、固定……）</td></tr>
+                        <tr><td><kbd>Tab</kbd></td><td data-i18n="m.k5">标题补全到搜索框</td></tr>
+                        <tr><td><kbd>Esc</kbd></td><td data-i18n="m.k6">逐层退掉：动作 → 详情 → AI → 查询词 → 隐藏</td></tr>
+                    </tbody>
+                </table>
+
+                <h3 class="manual-h3" data-i18n="m.hot-plugin-h">插件一句话</h3>
+                <p data-i18n="m.hot-plugin">输入 <code>gallery</code> 查看内置的十一个插件（单位换算、时间戳、正则、时区、汇率……），回车安装。插件用任何能输出 JSON 的语言编写，见 <a href="https://github.com/turinglambdaai/fulcrum/blob/main/docs/plugins.md">docs/plugins.md</a>——Python 就够。</p>
+            </section>
+
+            <!-- =================== FAQ =================== -->
+            <section class="manual-section" id="faq">
+                <h2 class="manual-h2"><span class="h2-emoji">❓</span>
+                    <span data-i18n="m.faq-title">常见问题</span>
+                </h2>
+
+                <h3 class="manual-h3" data-i18n="m.faq-data-h">数据存在哪？</h3>
+                <p data-i18n="m.faq-data">全部数据在一个目录里。删掉它就是全新状态：</p>
+                <ul>
+                    <li>macOS：<code>~/Library/Application Support/Fulcrum</code></li>
+                    <li>Windows：<code>%APPDATA%\Fulcrum</code></li>
+                    <li>Linux：<code>~/.local/share/fulcrum</code></li>
+                </ul>
+                <p data-i18n="m.faq-sync">同步 beta：把 <code>sync-root</code> 设到 iCloud Drive、Dropbox、Syncthing 或任何同步目录，设置与片段自动镜像过去；新机器首次启动自动恢复。剪贴板历史和 AI 密钥<strong>刻意</strong>不同步。</p>
+
+                <h3 class="manual-h3" data-i18n="m.faq-perm-h">macOS 授权了才能用的功能</h3>
+                <p data-i18n="m.faq-perm">两个功能需要辅助功能权限：<strong>粘贴回前台</strong>和<strong>片段自动展开</strong>。搜索、计算、启动应用、AI 都不需要。授权路径：系统设置 → 隐私与安全性 → 辅助功能 → 打开 Fulcrum。若已打开仍不生效：先关掉再打开（重授一次）；macOS 大版本升级后偶发需要重授。首次使用时弹出的系统授权框点了「稍后」也没关系，随时可以来这里补。</p>
+                <p data-i18n="m.faq-perm-linux">Linux：X11 一切开箱即用；Wayland 装好 <code>wtype</code> 才能粘贴回前台，片段展开在 Wayland 上不可用。Windows：无需额外授权。</p>
+
+                <h3 class="manual-h3" data-i18n="m.faq-account-h">要注册账号吗？收费吗？</h3>
+                <p data-i18n="m.faq-account">没有账号体系，没有遥测，没有网络依赖。抢先体验期间完全免费；Pro 计划随 1.0 再说。AI 用你自己的密钥，Fulcrum 不抽成、不经手。</p>
+
+                <h3 class="manual-h3" data-i18n="m.faq-platform-h">支持哪些系统？各平台有差异吗？</h3>
+                <p data-i18n="m.faq-platform">macOS 14+（Apple silicon 与 Intel）、Windows 10（19041+）/ 11、Linux（GTK4；.deb / .rpm / .AppImage / tar.gz）。诚实清单：文件搜索仅限 macOS；片段自动展开不支持 Linux；剪贴板只收文本。其余功能三平台一致、键位一致。</p>
+
+                <h3 class="manual-h3" data-i18n="m.faq-lang-h">怎么换语言和主题？</h3>
+                <p data-i18n="m.faq-lang">面板内：<code>settings</code> → <code>language</code>（zh / en）、<code>theme</code>（system / light / dark，即时生效）。深色面板长这样：</p>
+                <img src="img/fulcrum-main-dark.png"
+                     alt="Fulcrum 启动面板（macOS 深色主题）"
+                     data-i18n-alt="shot.dark-alt"
+                     class="manual-shot" loading="lazy">
+                <p class="manual-hint" data-i18n="m.faq-lang-hint">同一块面板，深色主题。本站右上角 ◐ 也可以切换网站深浅色。</p>
+
+                <h3 class="manual-h3" data-i18n="m.faq-update-h">更新失败怎么办？</h3>
+                <p data-i18n="m.faq-update">面板里输入 <code>update</code> → Check for updates now。更新包后台下载，macOS 原地换装重启。更新包带 Ed25519 签名——校验失败直接拒收，绝不安装损坏的包。多次失败：到 <a href="https://github.com/turinglambdaai/fulcrum/releases/latest">Releases</a> 页手动下载最新版覆盖安装，设置与数据不受影响。</p>
+
+                <h3 class="manual-h3" data-i18n="m.faq-uninstall-h">怎么卸载？</h3>
+                <p data-i18n="m.faq-uninstall">先退出：菜单栏（macOS）或托盘（Windows）图标 → Quit Fulcrum——这是唯一的退出方式，Esc 只是隐藏。再删应用：macOS 从「应用程序」拖进废纸篓；Windows 在「设置 → 应用」里卸载；Linux 用包管理器卸载或直接删 AppImage。想彻底清空：删掉上文的数据目录即可，辅助功能授权随应用删除自动失效。</p>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-brand">
+                <svg width="22" height="22" viewBox="0 0 512 512" fill="none">
+                    <rect width="512" height="512" rx="115" fill="#c15f3c"/>
+                    <path d="M108 404 L404 404" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+                    <path d="M256 236 L344 388 L168 388 Z" fill="#FFFFFF"/>
+                    <path d="M132 282 L380 176" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+                    <circle cx="398" cy="168" r="30" fill="#FFFFFF"/>
+                </svg>
+                Fulcrum
+            </div>
+            <div class="footer-links">
+                <a href="index.html" data-i18n="footer.home">首页</a>
+                <a href="https://github.com/turinglambdaai/fulcrum">GitHub</a>
+                <a href="https://github.com/turinglambdaai/fulcrum/blob/main/CHANGELOG.md" data-i18n="footer.changelog">更新日志</a>
+                <a href="https://rivet.jrtx.site">Rivet</a>
+            </div>
+            <div class="footer-note">© 2026 TuringLambda AI</div>
+        </div>
+    </footer>
+
+    <script>
+        // Unified language policy (family standard, same as the homepage):
+        // explicit choice wins; otherwise follow the browser locale.
+        // Default copy is Chinese — data-i18n keys resolve against these
+        // dictionaries.
+        (function () {
+            var LANGUAGE_OVERRIDE_KEY = 'fulcrum-lang-override-v2';
+
+            var zh = {
+                "nav.features": "功能", "nav.platforms": "平台", "nav.guide": "手册",
+                "m.eyebrow": "使用手册",
+                "m.h1": "Fulcrum 能做的一切，", "m.h1b": "一页说清。",
+                "m.lead": "从安装到 AI 密钥，从粘贴回前台到热键自定义——还有最常见的几个坑，都在这里。",
+                "m.toc-start": "上手", "m.toc-quickstart": "五分钟上手",
+                "m.toc-core": "核心功能", "m.toc-search": "搜索一切", "m.toc-clipboard": "剪贴板历史",
+                "m.toc-snippets": "片段", "m.toc-ai": "AI（自带密钥）", "m.toc-system": "窗口与系统命令",
+                "m.toc-hotkey": "热键与设置", "m.toc-faq": "常见问题", "m.toc-faq-link": "FAQ",
+                "m.qs-title": "五分钟上手",
+                "m.qs-lead": "装好、唤起、跑通第一条命令。整份手册其余的部分都是可选的。",
+                "m.qs-1": "<strong>安装。</strong>到 <a href='https://github.com/turinglambdaai/fulcrum/releases/latest'>Releases</a> 页下载最新版：macOS 把 .dmg 里的 Fulcrum 拖进「应用程序」；Windows 双击 .msi 安装；Linux 用 .deb / .rpm / .AppImage。没有账号，没有引导问卷。",
+                "m.qs-2": "<strong>唤起。</strong>按 <kbd>Alt</kbd>+<kbd>Space</kbd>（macOS 是 <kbd>⌥</kbd>+<kbd>Space</kbd>），浮动面板出现在屏幕中央。再按一次，面板隐藏。热键被别的软件占了？Fulcrum 自动退到 <code>Ctrl+Alt+Space</code> 并提示。",
+                "m.qs-3": "<strong>跑第一条命令。</strong>输入 <code>calc</code> 回车——计算器打开。再唤起，输入 <code>128*768</code>——答案就在列表里，回车即复制。存第一个片段：输入 <code>add snippet addr 南京西路 42 号</code>。",
+                "m.qs-4": "<strong>粘贴回前台。</strong>在任意应用里复制一段文字。唤起面板，输入 <code>clip</code> 或那段文字里的任意词，回车——文字直接粘进你刚才在用的应用，不用切窗口。macOS 第一次会请求辅助功能权限，授权一次全局生效（详见 <a href='#faq'>FAQ</a>）。",
+                "shot.main-alt": "Fulcrum 启动面板（macOS 浅色主题）：搜索框、应用结果列表与底部键位提示",
+                "m.qs-hint": "截图为真实的 macOS 版本。Windows 与 Linux 面板布局相同，控件随平台风格。",
+                "m.qs-outro": "整个产品就是：<strong>一个键 → 输入 → 回车</strong>。下面全是细节。",
+                "m.search-title": "搜索一切",
+                "m.search-lead": "面板只有一个输入框，但什么都接：应用、算式、文件、网页、表情。",
+                "m.search-apps-h": "启动应用",
+                "m.search-apps": "输入应用名的任意片段——<code>ffx</code> 能找到 Firefox，手滑打错也能容忍。常用的应用会越用越靠前。",
+                "m.search-calc-h": "行内计算",
+                "m.search-calc": "直接敲算式：<code>128*768</code>、<code>(2+3)^4</code>、<code>sqrt(2)</code>、<code>sin(pi/4)</code>。答案出现在结果最上面，回车复制。",
+                "m.search-bang-h": "网页搜索 bang",
+                "m.th-input": "输入", "m.th-opens": "打开", "m.th-input2": "输入", "m.th-opens2": "打开",
+                "m.bang-maps": "Google 地图", "m.bang-wiki": "维基百科",
+                "m.search-bang-note": "没被别处匹配的普通文字，最后会出现一条通用搜索行（默认 <code>!g</code>，可在设置里换）。",
+                "m.search-quick-h": "快捷链接",
+                "m.search-quick": "建立自己的 URL 模板：<code>add link yt https://youtube.com/search?q={query}</code>。之后 <code>yt lofi</code> 就打开 YouTube 搜索，<code>{query}</code> 被替换成关键词后面的内容。输入 <code>quicklinks</code> 查看和删除。",
+                "m.search-file-h": "找文件与表情",
+                "m.search-file": "<code>find 发票</code> 通过 Spotlight 搜文件名（macOS）。输入表情英文名的两个以上字母——<code>grin</code>、<code>fire</code>、<code>heart</code>——匹配的表情内联出现，回车直接粘贴。",
+                "m.clip-title": "剪贴板历史",
+                "m.clip-lead": "你复制的每段文字都会被记住——在本机、可搜索、可固定。",
+                "m.clip-1": "<strong>粘贴。</strong>输入 <code>clip</code> 或历史内容里的任意词，回车——粘贴进你刚才在用的应用。",
+                "m.clip-2": "<strong>复制而非粘贴。</strong>选中某条历史，按 <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd>，从附加动作里选复制。",
+                "m.clip-3": "<strong>开关与容量。</strong><code>settings</code> → <code>clipboard-enabled</code> 总开关；<code>clipboard-limit</code> 控制保留条数。",
+                "m.clip-4": "<strong>隐私。</strong>历史是本地 JSON，从不离开设备。剪贴板只收文本。",
+                "m.snip-title": "片段",
+                "m.snip-lead": "把一段文字存在关键词下面，在任何应用里输入关键词，原地展开。",
+                "m.snip-add": "建立片段：<code>add snippet addr 南京西路 42 号</code>。",
+                "m.snip-use": "在邮件里输入 <code>addr</code> 加空格，就变成 <code>南京西路 42 号</code>。展开是自动的——词边界一触发就替换，不用按任何快捷键。macOS 与 Windows 支持；Linux 的合成器（Wayland）不允许所需的输入监听，故不提供。在 <code>settings</code> → <code>expansion-enabled</code> 随时开关。片段可通过同步 beta 跨机器带走（见 <a href='#faq'>FAQ</a>）。",
+                "m.ai-title": "AI（自带密钥）",
+                "m.ai-lead": "Fulcrum 不收费、不经手数据。AI 用你自己的 OpenAI、Anthropic 或本地 Ollama。密钥存在本地文件里，永不同步、永不上传——只有你执行 AI 命令时，提示词才发给你选的服务商。",
+                "m.ai-setup-h": "一次性设置（最常见的卡点）",
+                "m.ai-setup-1": "<strong>选服务商。</strong>唤起面板，输入 <code>settings</code>，回车运行 <code>ai-provider</code> 那行，切到 OpenAI / Anthropic / Ollama。",
+                "m.ai-setup-2": "<strong>填密钥。</strong>再次唤起面板，输入 <code>ai key</code> 加你的真实密钥（例如 <code>ai key sk-…</code>），回车。密钥落在本地，界面不会回显。",
+                "m.ai-setup-3": "<strong>Ollama 用户免密钥。</strong>只要 <code>ollama serve</code> 在本机跑着，选好 provider 直接用。",
+                "m.ai-setup-4": "<strong>验证。</strong>输入 <code>ai 你好</code>——答案流式打进面板，即配置成功。",
+                "m.ai-callout-title": "提示「没有密钥」？",
+                "m.ai-callout": "先选服务商（第 1 步），再填密钥（第 2 步）——顺序反了会报「没有密钥」。换服务商后需重新填一次对应的密钥。",
+                "m.ai-cmd-h": "日常用法",
+                "m.th-effect": "效果",
+                "m.ai-c1": "总结剪贴板内容", "m.ai-c2": "修正剪贴板文本的语法拼写",
+                "m.ai-c3": "翻译剪贴板到中文（或任意语言）", "m.ai-c4": "解释剪贴板内容",
+                "m.ai-c5": "多轮对话，记住前文", "m.ai-c6": "任何以 ？ 结尾的问句自动出现 AI 行",
+                "m.ai-stream": "答案<strong>流式打进面板</strong>——模型还在生成你就能开始读——完成后自动进剪贴板。",
+                "m.ai-mem-h": "记忆与控制",
+                "m.ai-mem": "对话历史跨重启持久化（仅本地）。<code>ai undo</code> 回退上一轮；<code>ai reset</code> 清空重来；<code>ai persona 你是简洁的技术写作者</code> 设持久人设；<code>ai model gpt-4o</code> 不离开面板切模型。",
+                "m.sys-title": "窗口与系统命令",
+                "m.sys-win": "输入 <code>window</code> 或命令名的一部分：<strong>左半屏、右半屏、最大化、近最大化、居中、还原</strong>——作用于你召唤 Fulcrum 之前最前面的那个窗口。三平台都是原生实现。",
+                "m.sys-cmd": "<code>lock</code>、<code>sleep</code>、<code>restart</code>、<code>toggle dark mode</code>、<code>empty trash</code>——Fulcrum 只列出你的平台上真实存在的命令，不会给一个点了没反应的假条目。",
+                "m.hot-title": "热键与设置",
+                "m.hot-lead": "输入 <code>settings</code>，回车运行对应的行即可修改：",
+                "m.th-setting": "设置", "m.th-meaning": "说明",
+                "m.hot-lang": "界面语言（zh / en）",
+                "m.hot-theme": "system / light / dark，即时生效",
+                "m.hot-hotkey": "循环切换热键预设",
+                "m.hot-max": "结果列表行数（5–25）",
+                "m.hot-clip": "剪贴板历史开关",
+                "m.hot-exp": "片段自动展开开关",
+                "m.hot-web": "网页搜索行开关",
+                "m.hot-plugins": "插件加载开关",
+                "m.hot-ai": "AI 服务商",
+                "m.hot-custom-h": "自定义热键",
+                "m.hot-custom": "<code>settings</code> → <code>hotkey</code> 在四个预设间循环：<code>alt+space</code> → <code>ctrl+alt+space</code> → <code>ctrl+shift+space</code> → <code>alt+shift+space</code>。想用别的组合：编辑数据目录下的 <code>settings.json</code>，写 <code>\"hotkey\": \"ctrl+shift+space\"</code> 这样的值——修饰键 <code>alt/ctrl/shift/cmd/win/super</code> 至少一个，键位 <code>space</code>、<code>a</code>–<code>z</code>、<code>0</code>–<code>9</code>、<code>f1</code>–<code>f12</code>、<code>comma</code>、<code>period</code>、<code>minus</code>、<code>equal</code>、<code>tab</code>。三平台通用。组合被占用时 Fulcrum 自动退避并提示，菜单栏（macOS）或托盘（Windows）里也永远有 Open Fulcrum。",
+                "m.hot-keys-h": "键位速查",
+                "m.th-key": "按键", "m.th-action": "动作",
+                "m.k1": "显示 / 隐藏面板",
+                "m.k2": "移动选中",
+                "m.k3": "执行（剪贴板 = 粘贴；表情 = 插入；文件 = 打开）",
+                "m.k4": "附加动作（复制、固定……）",
+                "m.k5": "标题补全到搜索框",
+                "m.k6": "逐层退掉：动作 → 详情 → AI → 查询词 → 隐藏",
+                "m.hot-plugin-h": "插件一句话",
+                "m.hot-plugin": "输入 <code>gallery</code> 查看内置的十一个插件（单位换算、时间戳、正则、时区、汇率……），回车安装。插件用任何能输出 JSON 的语言编写，见 <a href='https://github.com/turinglambdaai/fulcrum/blob/main/docs/plugins.md'>docs/plugins.md</a>——Python 就够。",
+                "m.faq-title": "常见问题",
+                "m.faq-data-h": "数据存在哪？",
+                "m.faq-data": "全部数据在一个目录里。删掉它就是全新状态：",
+                "m.faq-sync": "同步 beta：把 <code>sync-root</code> 设到 iCloud Drive、Dropbox、Syncthing 或任何同步目录，设置与片段自动镜像过去；新机器首次启动自动恢复。剪贴板历史和 AI 密钥<strong>刻意</strong>不同步。",
+                "m.faq-perm-h": "macOS 授权了才能用的功能",
+                "m.faq-perm": "两个功能需要辅助功能权限：<strong>粘贴回前台</strong>和<strong>片段自动展开</strong>。搜索、计算、启动应用、AI 都不需要。授权路径：系统设置 → 隐私与安全性 → 辅助功能 → 打开 Fulcrum。若已打开仍不生效：先关掉再打开（重授一次）；macOS 大版本升级后偶发需要重授。首次使用时弹出的系统授权框点了「稍后」也没关系，随时可以来这里补。",
+                "m.faq-perm-linux": "Linux：X11 一切开箱即用；Wayland 装好 <code>wtype</code> 才能粘贴回前台，片段展开在 Wayland 上不可用。Windows：无需额外授权。",
+                "m.faq-account-h": "要注册账号吗？收费吗？",
+                "m.faq-account": "没有账号体系，没有遥测，没有网络依赖。抢先体验期间完全免费；Pro 计划随 1.0 再说。AI 用你自己的密钥，Fulcrum 不抽成、不经手。",
+                "m.faq-platform-h": "支持哪些系统？各平台有差异吗？",
+                "m.faq-platform": "macOS 14+（Apple silicon 与 Intel）、Windows 10（19041+）/ 11、Linux（GTK4；.deb / .rpm / .AppImage / tar.gz）。诚实清单：文件搜索仅限 macOS；片段自动展开不支持 Linux；剪贴板只收文本。其余功能三平台一致、键位一致。",
+                "m.faq-lang-h": "怎么换语言和主题？",
+                "m.faq-lang": "面板内：<code>settings</code> → <code>language</code>（zh / en）、<code>theme</code>（system / light / dark，即时生效）。深色面板长这样：",
+                "shot.dark-alt": "Fulcrum 启动面板（macOS 深色主题）",
+                "m.faq-lang-hint": "同一块面板，深色主题。本站右上角 ◐ 也可以切换网站深浅色。",
+                "m.faq-update-h": "更新失败怎么办？",
+                "m.faq-update": "面板里输入 <code>update</code> → Check for updates now。更新包后台下载，macOS 原地换装重启。更新包带 Ed25519 签名——校验失败直接拒收，绝不安装损坏的包。多次失败：到 <a href='https://github.com/turinglambdaai/fulcrum/releases/latest'>Releases</a> 页手动下载最新版覆盖安装，设置与数据不受影响。",
+                "m.faq-uninstall-h": "怎么卸载？",
+                "m.faq-uninstall": "先退出：菜单栏（macOS）或托盘（Windows）图标 → Quit Fulcrum——这是唯一的退出方式，Esc 只是隐藏。再删应用：macOS 从「应用程序」拖进废纸篓；Windows 在「设置 → 应用」里卸载；Linux 用包管理器卸载或直接删 AppImage。想彻底清空：删掉上文的数据目录即可，辅助功能授权随应用删除自动失效。",
+                "footer.home": "首页", "footer.changelog": "更新日志"
+            };
+
+            var en = {
+                "nav.features": "Features", "nav.platforms": "Platforms", "nav.guide": "Manual",
+                "m.eyebrow": "User Manual",
+                "m.h1": "Everything Fulcrum can do,", "m.h1b": " on one page.",
+                "m.lead": "From installation to AI keys, from paste-to-frontmost to custom hotkeys — plus the pitfalls people actually hit.",
+                "m.toc-start": "Get started", "m.toc-quickstart": "Five-minute start",
+                "m.toc-core": "Core", "m.toc-search": "Search everything", "m.toc-clipboard": "Clipboard history",
+                "m.toc-snippets": "Snippets", "m.toc-ai": "AI (bring your own key)", "m.toc-system": "Windows & system",
+                "m.toc-hotkey": "Hotkey & settings", "m.toc-faq": "FAQ", "m.toc-faq-link": "FAQ",
+                "m.qs-title": "Five-minute start",
+                "m.qs-lead": "Install, summon, run your first command. Everything else in this manual is optional.",
+                "m.qs-1": "<strong>Install.</strong> Grab the latest build from the <a href='https://github.com/turinglambdaai/fulcrum/releases/latest'>Releases</a> page: drag Fulcrum from the .dmg into Applications on macOS, run the .msi on Windows, or install the .deb / .rpm / .AppImage on Linux. No account, no onboarding quiz.",
+                "m.qs-2": "<strong>Summon it.</strong> Press <kbd>Alt</kbd>+<kbd>Space</kbd> (<kbd>⌥</kbd>+<kbd>Space</kbd> on macOS) and the floating panel appears in the middle of the screen. Press it again to hide. Hotkey taken? Fulcrum falls back to <code>Ctrl+Alt+Space</code> and tells you.",
+                "m.qs-3": "<strong>Run your first commands.</strong> Type <code>calc</code> and press Enter — the calculator opens. Summon again, type <code>128*768</code> — the answer is right there, Enter copies it. Save your first snippet: type <code>add snippet addr 42 Wall Street</code>.",
+                "m.qs-4": "<strong>Paste back into your app.</strong> Copy some text anywhere. Summon the panel, type <code>clip</code> or any word from that text, press Enter — it pastes straight into the app you came from. macOS asks for the Accessibility permission once (see the <a href='#faq'>FAQ</a>).",
+                "shot.main-alt": "The Fulcrum launcher panel (macOS, light theme): search field, app results and key hints in the footer",
+                "m.qs-hint": "The screenshot is the real macOS build. Windows and Linux use the same layout with platform-styled controls.",
+                "m.qs-outro": "The whole product is <strong>one key → type → Enter</strong>. Everything below is detail.",
+                "m.search-title": "Search everything",
+                "m.search-lead": "The panel has one input, and everything plugs into it: apps, math, files, the web, emoji.",
+                "m.search-apps-h": "Launch apps",
+                "m.search-apps": "Type any fragment of an app's name — <code>ffx</code> finds Firefox, typos are tolerated. The apps you use drift to the top.",
+                "m.search-calc-h": "Inline calculation",
+                "m.search-calc": "Just type math: <code>128*768</code>, <code>(2+3)^4</code>, <code>sqrt(2)</code>, <code>sin(pi/4)</code>. The answer sits at the top of the list; Enter copies it.",
+                "m.search-bang-h": "Web-search bangs",
+                "m.th-input": "Type", "m.th-opens": "Opens", "m.th-input2": "Type", "m.th-opens2": "Opens",
+                "m.bang-maps": "Google Maps", "m.bang-wiki": "Wikipedia",
+                "m.search-bang-note": "Plain text nothing else claims gets a generic web-search row (default <code>!g</code>, configurable).",
+                "m.search-quick-h": "Quicklinks",
+                "m.search-quick": "Create your own URL template: <code>add link yt https://youtube.com/search?q={query}</code>. Then <code>yt lofi</code> opens a YouTube search — <code>{query}</code> is replaced by whatever follows the keyword. Type <code>quicklinks</code> to review and delete.",
+                "m.search-file-h": "Files & emoji",
+                "m.search-file": "<code>find invoice</code> searches file names via Spotlight (macOS). Type two or more letters of an emoji's English name — <code>grin</code>, <code>fire</code>, <code>heart</code> — and matching emoji appear inline; Enter pastes them.",
+                "m.clip-title": "Clipboard history",
+                "m.clip-lead": "Every piece of text you copy is remembered — on-device, searchable, pinnable.",
+                "m.clip-1": "<strong>Paste.</strong> Type <code>clip</code> or any word from the entry, press Enter — it pastes into the app you came from.",
+                "m.clip-2": "<strong>Copy, don't paste.</strong> Select an entry and press <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd>, then pick Copy from the actions.",
+                "m.clip-3": "<strong>Toggle & size.</strong> <code>settings</code> → <code>clipboard-enabled</code> turns history on or off; <code>clipboard-limit</code> caps how many entries are kept.",
+                "m.clip-4": "<strong>Privacy.</strong> History is a local JSON file and never leaves the device. Text only — images are not recorded.",
+                "m.snip-title": "Snippets",
+                "m.snip-lead": "Store text under a keyword; typing that keyword anywhere expands it in place.",
+                "m.snip-add": "Create one: <code>add snippet addr 42 Wall Street</code>.",
+                "m.snip-use": "Type <code>addr</code> plus a space in an email and it becomes <code>42 Wall Street</code>. Expansion is automatic — a word boundary fires it, no shortcut to press. Supported on macOS and Windows; Linux compositors (Wayland) forbid the required input monitoring. Toggle it in <code>settings</code> → <code>expansion-enabled</code>. Snippets travel via the sync beta (see the <a href='#faq'>FAQ</a>).",
+                "m.ai-title": "AI (bring your own key)",
+                "m.ai-lead": "Fulcrum charges nothing and touches nothing. AI runs on your own OpenAI, Anthropic or local Ollama key. The key lives in a local file, is never synced, never uploaded — only prompts you explicitly run are sent, and only to the provider you picked.",
+                "m.ai-setup-h": "One-time setup (the usual stumbling block)",
+                "m.ai-setup-1": "<strong>Pick a provider.</strong> Summon the panel, type <code>settings</code>, run the <code>ai-provider</code> row, switch to OpenAI / Anthropic / Ollama.",
+                "m.ai-setup-2": "<strong>Enter the key.</strong> Summon the panel again and type <code>ai key</code> followed by your real key (e.g. <code>ai key sk-…</code>), then Enter. The key lands locally; the UI never echoes it.",
+                "m.ai-setup-3": "<strong>Ollama needs no key.</strong> With <code>ollama serve</code> running locally, just pick the provider and go.",
+                "m.ai-setup-4": "<strong>Verify.</strong> Type <code>ai hello</code> — a streaming answer means you're set.",
+                "m.ai-callout-title": "\"No key\" error?",
+                "m.ai-callout": "Pick the provider (step 1) before entering the key (step 2) — reversed order reports \"no key\". Switching providers means entering that provider's key once.",
+                "m.ai-cmd-h": "Everyday commands",
+                "m.th-effect": "Effect",
+                "m.ai-c1": "Summarize the clipboard", "m.ai-c2": "Fix grammar and spelling of clipboard text",
+                "m.ai-c3": "Translate the clipboard (any language)", "m.ai-c4": "Explain the clipboard contents",
+                "m.ai-c5": "Multi-turn chat that remembers context", "m.ai-c6": "Any question ending in ? gets an AI row automatically",
+                "m.ai-stream": "Answers <strong>stream into the panel</strong> — read while the model is still writing — and land in your clipboard when done.",
+                "m.ai-mem-h": "Memory & control",
+                "m.ai-mem": "Conversation history persists across restarts (locally only). <code>ai undo</code> rolls back a turn; <code>ai reset</code> starts over; <code>ai persona You are a terse technical writer</code> sets a persistent persona; <code>ai model gpt-4o</code> switches models without leaving the panel.",
+                "m.sys-title": "Windows & system commands",
+                "m.sys-win": "Type <code>window</code> or part of a command: <strong>left half, right half, maximize, almost-maximize, center, restore</strong> — applied to the window that was frontmost before you summoned Fulcrum. Natively implemented on all three platforms.",
+                "m.sys-cmd": "<code>lock</code>, <code>sleep</code>, <code>restart</code>, <code>toggle dark mode</code>, <code>empty trash</code> — Fulcrum only lists commands that really exist on your platform, never a dead entry.",
+                "m.hot-title": "Hotkey & settings",
+                "m.hot-lead": "Type <code>settings</code> and run the row you want to change:",
+                "m.th-setting": "Setting", "m.th-meaning": "Meaning",
+                "m.hot-lang": "UI language (zh / en)",
+                "m.hot-theme": "system / light / dark, applied instantly",
+                "m.hot-hotkey": "Cycle through hotkey presets",
+                "m.hot-max": "Rows in the result list (5–25)",
+                "m.hot-clip": "Clipboard history on/off",
+                "m.hot-exp": "Snippet auto-expansion on/off",
+                "m.hot-web": "Web-search rows on/off",
+                "m.hot-plugins": "Plugin loading on/off",
+                "m.hot-ai": "AI provider",
+                "m.hot-custom-h": "Custom hotkey",
+                "m.hot-custom": "<code>settings</code> → <code>hotkey</code> cycles four presets: <code>alt+space</code> → <code>ctrl+alt+space</code> → <code>ctrl+shift+space</code> → <code>alt+shift+space</code>. Want something else: edit <code>settings.json</code> in the data directory and set <code>\"hotkey\": \"ctrl+shift+space\"</code> — modifiers <code>alt/ctrl/shift/cmd/win/super</code> (at least one) plus a key from <code>space</code>, <code>a</code>–<code>z</code>, <code>0</code>–<code>9</code>, <code>f1</code>–<code>f12</code>, <code>comma</code>, <code>period</code>, <code>minus</code>, <code>equal</code>, <code>tab</code>. Same grammar on all three platforms. A taken combo falls back automatically with a notice; Open Fulcrum always remains in the menu bar (macOS) or tray (Windows).",
+                "m.hot-keys-h": "Key reference",
+                "m.th-key": "Keys", "m.th-action": "Action",
+                "m.k1": "Show / hide the panel",
+                "m.k2": "Move the selection",
+                "m.k3": "Run (clipboard = paste; emoji = insert; file = open)",
+                "m.k4": "Additional actions (copy, pin, …)",
+                "m.k5": "Complete the title into the search field",
+                "m.k6": "Back out layer by layer: actions → detail → AI → query → hide",
+                "m.hot-plugin-h": "Plugins in one paragraph",
+                "m.hot-plugin": "Type <code>gallery</code> to browse the eleven bundled plugins (unit conversion, timestamps, regex, time zones, exchange rates…); Enter installs. Plugins speak JSON over stdio in any language — see <a href='https://github.com/turinglambdaai/fulcrum/blob/main/docs/plugins.md'>docs/plugins.md</a>. Python is enough.",
+                "m.faq-title": "FAQ",
+                "m.faq-data-h": "Where is my data?",
+                "m.faq-data": "Everything lives in one directory. Delete it for a fresh start:",
+                "m.faq-sync": "Sync beta: point <code>sync-root</code> at iCloud Drive, Dropbox, Syncthing or any synced folder and settings plus snippets are mirrored there; a new machine restores on first launch. Clipboard history and AI keys are <strong>deliberately</strong> not synced.",
+                "m.faq-perm-h": "What needs permission on macOS?",
+                "m.faq-perm": "Two features need the Accessibility permission: <strong>paste-to-frontmost</strong> and <strong>snippet expansion</strong>. Search, calculation, app launching and AI never do. Grant it at System Settings → Privacy & Security → Accessibility → enable Fulcrum. Already on but not working: toggle it off and back on (re-grant); a macOS upgrade can require this. Dismissed the first-run prompt? Come back here any time.",
+                "m.faq-perm-linux": "Linux: X11 works out of the box; on Wayland install <code>wtype</code> for paste-to-frontmost, and snippet expansion is unavailable on Wayland. Windows: no extra permissions.",
+                "m.faq-account-h": "Is there an account? Does it cost anything?",
+                "m.faq-account": "No accounts, no telemetry, no network dependency. Everything is free during early access; a Pro plan may arrive with 1.0. AI runs on your own key — Fulcrum takes no cut and touches no data.",
+                "m.faq-platform-h": "Which systems are supported? Any differences?",
+                "m.faq-platform": "macOS 14+ (Apple silicon and Intel), Windows 10 (19041+) / 11, Linux (GTK4; .deb / .rpm / .AppImage / tar.gz). The honest list: file search is macOS-only; snippet expansion is unavailable on Linux; the clipboard records text only. Everything else matches across platforms, keys included.",
+                "m.faq-lang-h": "How do I change language and theme?",
+                "m.faq-lang": "In the panel: <code>settings</code> → <code>language</code> (zh / en) and <code>theme</code> (system / light / dark, applied instantly). The dark panel looks like this:",
+                "shot.dark-alt": "The Fulcrum launcher panel (macOS, dark theme)",
+                "m.faq-lang-hint": "The same panel in the dark theme. The ◐ button in this site's nav switches the website's own theme.",
+                "m.faq-update-h": "The update fails — now what?",
+                "m.faq-update": "Type <code>update</code> in the panel → Check for updates now. Updates download in the background; on macOS the app swaps itself in place and relaunches. Update bundles carry an Ed25519 signature — a failed check is rejected, never installed. If it keeps failing: download the latest build from the <a href='https://github.com/turinglambdaai/fulcrum/releases/latest'>Releases</a> page and install over the old one; settings and data are untouched.",
+                "m.faq-uninstall-h": "How do I uninstall?",
+                "m.faq-uninstall": "Quit first: menu-bar (macOS) or tray (Windows) icon → Quit Fulcrum — the only quit affordance; Esc merely hides. Then remove the app: drag it from Applications to the Trash on macOS, uninstall under Settings → Apps on Windows, or use your package manager (or delete the AppImage) on Linux. To wipe everything: delete the data directory listed above; the Accessibility grant expires with the app.",
+                "footer.home": "Home", "footer.changelog": "Changelog"
+            };
+
+            var pageMetadata = {
+                en: {
+                    title: 'Fulcrum — User Manual',
+                    description: 'The Fulcrum user manual: a five-minute start, clipboard history, snippets, AI key setup, hotkey customization, and answers to the most common questions.'
+                },
+                zh: {
+                    title: 'Fulcrum 手册 — 一次按键，直达一切。',
+                    description: 'Fulcrum 用户手册：五分钟上手、剪贴板历史、片段、AI 密钥配置、热键自定义，以及权限授权、数据存放等常见问题解答。'
+                }
+            };
+
+            function readLanguageOverride() {
+                try {
+                    var saved = localStorage.getItem(LANGUAGE_OVERRIDE_KEY);
+                    return saved === 'zh' || saved === 'en' ? saved : null;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function detectBrowserLanguage() {
+                var locale = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+                if (!locale) return 'zh';
+                return String(locale).toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+            }
+
+            function applyLanguage(lang, persist) {
+                if (persist) {
+                    try { localStorage.setItem(LANGUAGE_OVERRIDE_KEY, lang); } catch (e) { /* private mode */ }
+                }
+
+                var dict = lang === 'en' ? en : zh;
+                var nodes = document.querySelectorAll('[data-i18n]');
+                for (var i = 0; i < nodes.length; i++) {
+                    var key = nodes[i].getAttribute('data-i18n');
+                    // Rich entries (lists, steps, callouts) carry inline HTML.
+                    if (dict[key] !== undefined) nodes[i].innerHTML = dict[key];
+                }
+                var altNodes = document.querySelectorAll('[data-i18n-alt]');
+                for (var j = 0; j < altNodes.length; j++) {
+                    var altKey = altNodes[j].getAttribute('data-i18n-alt');
+                    if (dict[altKey]) altNodes[j].setAttribute('alt', dict[altKey]);
+                }
+                document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+                document.documentElement.setAttribute('data-language', lang);
+
+                var label = document.getElementById('current-lang-label');
+                if (label) label.textContent = lang === 'zh' ? '简体中文' : 'English';
+
+                var metadata = pageMetadata[lang];
+                if (metadata) {
+                    document.title = metadata.title;
+                    var description = document.querySelector('meta[name="description"]');
+                    if (description) description.setAttribute('content', metadata.description);
+                }
+            }
+
+            window.setLanguage = function (lang) {
+                if (lang !== 'zh' && lang !== 'en') return;
+                applyLanguage(lang, true);
+            };
+
+            applyLanguage(readLanguageOverride() || detectBrowserLanguage(), false);
+
+            window.addEventListener('languagechange', function () {
+                if (!readLanguageOverride()) applyLanguage(detectBrowserLanguage(), false);
+            });
+        })();
+
+        // Theme toggle: flip data-theme and persist the explicit choice.
+        document.getElementById('theme-btn').addEventListener('click', function () {
+            var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+            document.documentElement.dataset.theme = next;
+            try { localStorage.setItem('fulcrum-theme', next); } catch (e) { /* private mode */ }
+        });
+
+        // Active-TOC highlighting: mark the section currently in view.
+        (function () {
+            var links = Array.prototype.slice.call(document.querySelectorAll('.manual-toc a'));
+            var sections = links.map(function (a) {
+                var el = document.getElementById(a.getAttribute('href').slice(1));
+                return el ? { link: a, el: el } : null;
+            }).filter(Boolean);
+            if (!sections.length || !('IntersectionObserver' in window)) return;
+            var observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting) {
+                        sections.forEach(function (s) { s.link.classList.remove('active'); });
+                        var match = sections.find(function (s) { return s.el === entry.target; });
+                        if (match) match.link.classList.add('active');
+                    }
+                });
+            }, { rootMargin: '-80px 0px -66% 0px' });
+            sections.forEach(function (s) { observer.observe(s.el); });
+        })();
+    </script>
+</body>
+
+</html>

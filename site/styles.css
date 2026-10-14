@@ -800,3 +800,268 @@ html.js-anim .animate-on-scroll.is-visible { opacity: 1; transform: translateY(0
         transition-duration: 0.01ms !important;
     }
 }
+
+/*
+ * User manual (guide.html) — two-column layout with a sticky TOC,
+ * ported from the taskly manual and restated on Fulcrum's tokens.
+ */
+.manual-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 56px;
+    max-width: var(--wrapper-width);
+    margin: 0 auto;
+    padding: 0 24px;
+    text-align: left;
+}
+
+.manual-hero {
+    text-align: center;
+    padding: 88px 0 56px;
+}
+
+.manual-hero h1 {
+    font-family: var(--font-sans);
+    font-size: 56px;
+    line-height: 1.05;
+    font-weight: 500;
+    letter-spacing: -0.028em;
+    margin-bottom: 18px;
+}
+
+.manual-hero p.lead {
+    font-size: 20px;
+    line-height: 1.5;
+    color: var(--text-2);
+    max-width: 620px;
+    margin: 0 auto;
+}
+
+.manual-body {
+    padding-bottom: 110px;
+}
+
+/* Side TOC */
+.manual-toc {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    font-size: 13.5px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.manual-toc a {
+    display: block;
+    color: var(--text-2);
+    padding: 5px 0;
+    font-weight: 450;
+    border-left: 2px solid transparent;
+    padding-left: 14px;
+    margin-left: -14px;
+    transition: color 0.2s, border-color 0.2s;
+    line-height: 1.45;
+}
+
+.manual-toc a:hover {
+    color: var(--accent);
+}
+
+.manual-toc a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 550;
+}
+
+.manual-toc-group {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-3);
+    font-weight: 600;
+    margin: 16px 0 6px;
+}
+
+.manual-toc-group:first-child {
+    margin-top: 0;
+}
+
+/* Content sections */
+.manual-section {
+    padding-top: 14px;
+    padding-bottom: 52px;
+    scroll-margin-top: 80px;
+}
+
+.manual-section + .manual-section {
+    border-top: 1px solid var(--border);
+}
+
+.manual-h2 {
+    font-family: var(--font-sans);
+    font-size: 34px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.manual-h2 .h2-emoji {
+    font-size: 28px;
+}
+
+.manual-section > p {
+    font-size: 16.5px;
+    color: var(--text-2);
+    line-height: 1.65;
+    margin-bottom: 22px;
+    max-width: 680px;
+}
+
+.manual-section ol,
+.manual-section ul {
+    margin: 0 0 22px 0;
+    padding-left: 22px;
+    max-width: 680px;
+}
+
+.manual-section ol li,
+.manual-section ul li {
+    font-size: 16.5px;
+    color: var(--text-2);
+    line-height: 1.65;
+    margin-bottom: 12px;
+}
+
+.manual-shot {
+    width: 100%;
+    max-width: 760px;
+    height: auto;
+    display: block;
+    margin: 6px 0 10px 0;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--border);
+    box-shadow: 0 16px 40px rgba(31, 29, 26, 0.14);
+}
+
+.manual-hint {
+    font-size: 13.5px;
+    color: var(--text-3);
+    margin-top: 0;
+}
+
+.manual-h3 {
+    font-family: var(--font-sans);
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 32px;
+    margin-bottom: 12px;
+}
+
+/* Reference tables (commands, settings, keys) */
+.syntax-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 22px;
+    font-size: 14.5px;
+}
+
+.syntax-table th,
+.syntax-table td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.syntax-table th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-3);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-strong);
+}
+
+.syntax-table td:first-child {
+    white-space: nowrap;
+}
+
+.syntax-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Inline code chips */
+.manual-section code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--accent-tint);
+    color: var(--accent-hover);
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+}
+
+/* Callout / note box */
+.callout {
+    background: var(--accent-tint);
+    border: 1px solid var(--accent-soft);
+    border-radius: var(--radius-m);
+    padding: 16px 20px;
+    margin: 24px 0;
+    font-size: 14.5px;
+    color: var(--text);
+    line-height: 1.6;
+    max-width: 680px;
+}
+
+.callout-title {
+    font-weight: 600;
+    color: var(--accent-hover);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Keyboard key styling */
+kbd {
+    display: inline-block;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    line-height: 1.4;
+}
+
+/* FAQ entries */
+.faq-q {
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+/* Responsive — manual */
+@media (max-width: 860px) {
+    .manual-layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+    }
+
+    .manual-toc {
+        display: none;
+    }
+
+    .manual-hero h1 {
+        font-size: 38px;
+    }
+}

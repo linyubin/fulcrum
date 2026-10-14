@@ -20,3 +20,6 @@ Thumbs.db
 
 # Racket compilation artifacts
 compiled/
+
+# Generator dumps
+rivet-schema.json
