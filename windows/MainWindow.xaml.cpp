@@ -10,6 +10,11 @@
 #include <commctrl.h>
 #pragma comment(lib, "comctl32.lib")
 
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <optional>
+
 namespace winrt::RivetHost::implementation {
 namespace {
 
@@ -220,11 +225,261 @@ bool parse_hotkey(std::string const& spec, HotkeyBinding& out) {
   return true;
 }
 
+// ---- i18n (about + update surface) -----------------------------------------
+//
+// Host-wide UI strings for the about dialog and the update flow, keyed
+// exactly like shared/i18n/*.json — the single source of truth shared with
+// the macOS host (I18nService) and the Linux host. The files are flat
+// one-key-per-line JSON objects, so a line-based parser is enough.
+// rivet.rktd declares shared/i18n under `resources`, so packages carry it at
+// <dir>/app/shared/i18n; the embedded fallback table below keeps the same
+// keys for runs where nothing is staged. Lookup: active language → the
+// other language → the key itself. The active language follows the
+// backend's `language` setting, read once in PullHostSettings — a change
+// applies on the next launch, matching this host's one-shot settings pull.
+using I18nTable = std::map<std::string, std::wstring>;
+
+struct I18nEntry {
+  char const* key;
+  char const* zh;
+  char const* en;
+};
+
+// Only the keys this host renders. The staged JSON (or the mac host's copy
+// of the same table) carries the rest of the about/update surface.
+constexpr I18nEntry kI18nFallback[] = {
+    {"updateAvailableStatus", "发现新版本：Fulcrum v{0} — 输入 “update” 下载",
+     "Update available: Fulcrum v{0} — type \"update\" to download"},
+    {"updateDownloadedStatusWin",
+     "更新已下载 — 输入 “update” 打开文件夹，运行 MSI 完成升级",
+     "Update downloaded — type \"update\" to open the folder, then run the "
+     "MSI to upgrade"},
+    {"updateDownloadFailed", "更新下载失败：{0}",
+     "Update download failed: {0}"},
+    {"updateUnknownError", "未知错误", "unknown error"},
+    {"updateDownloadPercent", "正在下载更新… {0}%",
+     "Downloading update… {0}%"},
+    {"updateClose", "关闭", "Close"},
+    {"aboutContent",
+     "一键即达 — 应用、剪贴板、片段、窗口管理与 BYOK AI，尽在一个面板",
+     "One keystroke, everything within reach — apps, clipboard, snippets, "
+     "window management and BYOK AI in one panel"},
+    {"aboutLicense", "以 Business Source License 1.1 授权发布",
+     "Released under the Business Source License 1.1"},
+    {"aboutWebsite", "访问官网", "Website"},
+    {"aboutReportIssue", "问题反馈", "Report an Issue"},
+};
+
+I18nTable g_i18n[2];    // 0 = zh, 1 = en
+int g_i18n_active = 1;  // "en" until PullHostSettings reports the choice
+
+// Index of the closing quote for the JSON string starting at `start`
+// (which points at '"'), honoring backslash escapes.
+std::size_t i18n_string_end(std::wstring const& line, std::size_t start) {
+  for (std::size_t i = start + 1; i < line.size(); ++i) {
+    if (line[i] == L'\\') {
+      ++i;
+      continue;
+    }
+    if (line[i] == L'"') {
+      return i;
+    }
+  }
+  return std::wstring::npos;
+}
+
+std::wstring i18n_unescape(std::wstring const& raw) {
+  std::wstring out;
+  out.reserve(raw.size());
+  for (std::size_t i = 0; i < raw.size(); ++i) {
+    if (raw[i] != L'\\') {
+      out.push_back(raw[i]);
+      continue;
+    }
+    if (++i >= raw.size()) {
+      break;
+    }
+    switch (raw[i]) {
+      case L'"': out.push_back(L'"'); break;
+      case L'\\': out.push_back(L'\\'); break;
+      case L'/': out.push_back(L'/'); break;
+      case L'n': out.push_back(L'\n'); break;
+      case L't': out.push_back(L'\t'); break;
+      case L'r': out.push_back(L'\r'); break;
+      case L'b': out.push_back(L'\b'); break;
+      case L'f': out.push_back(L'\f'); break;
+      case L'u': {
+        if (i + 4 >= raw.size()) {
+          i = raw.size();
+          break;
+        }
+        unsigned int code = 0;
+        bool valid = true;
+        for (int digit = 1; digit <= 4; ++digit) {
+          wchar_t const h = raw[i + digit];
+          code <<= 4;
+          if (h >= L'0' && h <= L'9') {
+            code += static_cast<unsigned int>(h - L'0');
+          } else if (h >= L'a' && h <= L'f') {
+            code += static_cast<unsigned int>(h - L'a') + 10;
+          } else if (h >= L'A' && h <= L'F') {
+            code += static_cast<unsigned int>(h - L'A') + 10;
+          } else {
+            valid = false;
+            break;
+          }
+        }
+        if (!valid) {
+          i = raw.size();
+          break;
+        }
+        i += 4;
+        // Consecutive \uXXXX escapes concatenate into (surrogate) pairs.
+        out.push_back(static_cast<wchar_t>(code));
+        break;
+      }
+      default:
+        out.push_back(raw[i]);
+        break;
+    }
+  }
+  return out;
+}
+
+// Tolerant loader for the flat "key": "value" table. Returns true when at
+// least one entry was read; a malformed line is skipped, never fatal.
+bool load_i18n_file(std::filesystem::path const& path, int lang) {
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return false;
+  }
+  std::string bytes((std::istreambuf_iterator<char>(file)),
+                    std::istreambuf_iterator<char>());
+  if (bytes.size() >= 3 && bytes[0] == '\xEF' && bytes[1] == '\xBB' &&
+      bytes[2] == '\xBF') {
+    bytes.erase(0, 3);  // tolerate a BOM; the generator does not emit one
+  }
+  if (bytes.empty()) {
+    return false;
+  }
+  auto const size = ::MultiByteToWideChar(CP_UTF8, 0, bytes.data(),
+                                          static_cast<int>(bytes.size()),
+                                          nullptr, 0);
+  if (size <= 0) {
+    return false;
+  }
+  std::wstring text(static_cast<std::size_t>(size), L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()),
+                        text.data(), size);
+
+  auto& table = g_i18n[lang];
+  bool loaded_any = false;
+  std::size_t begin = 0;
+  while (begin < text.size()) {
+    auto end = text.find(L'\n', begin);
+    if (end == std::wstring::npos) {
+      end = text.size();
+    }
+    auto line = text.substr(begin, end - begin);
+    begin = end + 1;
+    if (!line.empty() && line.back() == L'\r') {
+      line.pop_back();
+    }
+
+    auto const key_start = line.find(L'"');
+    if (key_start == std::wstring::npos) {
+      continue;
+    }
+    auto const key_end = i18n_string_end(line, key_start);
+    if (key_end == std::wstring::npos) {
+      continue;
+    }
+    auto const colon = line.find(L':', key_end);
+    if (colon == std::wstring::npos) {
+      continue;
+    }
+    auto const value_start = line.find(L'"', colon + 1);
+    if (value_start == std::wstring::npos) {
+      continue;
+    }
+    auto const value_end = i18n_string_end(line, value_start);
+    if (value_end == std::wstring::npos) {
+      continue;
+    }
+    table[to_utf8(line.substr(key_start + 1, key_end - key_start - 1))] =
+        i18n_unescape(line.substr(value_start + 1,
+                                  value_end - value_start - 1));
+    loaded_any = true;
+  }
+  return loaded_any;
+}
+
+void load_i18n(std::filesystem::path const& exe_dir) {
+  char const* names[] = {"zh.json", "en.json"};
+  for (int lang = 0; lang < 2; ++lang) {
+    auto& table = g_i18n[lang];
+    table.clear();
+    for (auto const& entry : kI18nFallback) {
+      table.emplace(entry.key, to_wide(lang == 0 ? entry.zh : entry.en));
+    }
+    // Staged product resources: rivet.rktd declares shared/i18n under
+    // `resources`, so packages carry it at <dir>/app/shared/i18n; the dev
+    // tree wins for `raco rivet dev` runs where nothing is packaged yet
+    // (.rivet/stage holds the host binary one level below the repo root).
+    std::filesystem::path const candidates[] = {
+        exe_dir / L"app" / L"shared" / L"i18n",
+        exe_dir / L".." / L"shared" / L"i18n",  // dev tree
+    };
+    for (auto const& dir : candidates) {
+      auto const path = dir / names[lang];
+      std::error_code ec;
+      if (!std::filesystem::exists(path, ec)) {
+        continue;
+      }
+      if (load_i18n_file(path, lang)) {
+        break;
+      }
+    }
+  }
+}
+
+void set_i18n_language(std::string const& lang) {
+  g_i18n_active = (lang == "en") ? 1 : 0;
+}
+
+std::wstring t(char const* key) {
+  std::string const needle(key);
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    auto const& table = g_i18n[(g_i18n_active + attempt) % 2];
+    auto const it = table.find(needle);
+    if (it != table.end()) {
+      return it->second;
+    }
+  }
+  return to_wide(key);
+}
+
+// Positional formatting: first argument replaces {0}, and so on.
+std::wstring t_format(char const* key, std::vector<std::wstring> const& args) {
+  std::wstring out = t(key);
+  for (std::size_t i = 0; i < args.size(); ++i) {
+    std::wstring const token = L"{" + std::to_wstring(i) + L"}";
+    auto const pos = out.find(token);
+    if (pos != std::wstring::npos) {
+      out.replace(pos, token.size(), args[i]);
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 MainWindow::MainWindow() {
   InitializeComponent();
   Title(L"Fulcrum");
+  // i18n tables before any UI string is composed: the staged shared/i18n
+  // JSON when packaged, the embedded fallback otherwise.
+  load_i18n(executable_path().parent_path());
   InitializeBackendAsync();
 }
 
@@ -711,6 +966,7 @@ void MainWindow::PullHostSettings() {
   std::thread([weak, api, dispatcher]() mutable {
     std::string hotkey;
     std::string theme;
+    std::string language;
     try {
       hotkey = api->get_hotkey().get();
     } catch (...) {
@@ -719,16 +975,28 @@ void MainWindow::PullHostSettings() {
       theme = api->get_theme().get();
     } catch (...) {
     }
-    dispatcher.TryEnqueue([weak, hotkey, theme]() mutable {
-      if (auto window = weak.get()) {
-        if (!hotkey.empty()) {
-          window->ApplyHotkey(hotkey);
-        }
-        if (!theme.empty()) {
-          window->ApplyTheme(theme);
+    try {
+      // Row shape per the backend settings-list contract: [key, value, …].
+      auto const rows = api->settings_list().get();
+      for (auto const& row : rows) {
+        if (row.size() >= 2 && row[0] == "language") {
+          language = row[1];
         }
       }
-    });
+    } catch (...) {
+    }
+    dispatcher.TryEnqueue(
+        [weak, hotkey, theme, language]() mutable {
+          if (auto window = weak.get()) {
+            set_i18n_language(language);
+            if (!hotkey.empty()) {
+              window->ApplyHotkey(hotkey);
+            }
+            if (!theme.empty()) {
+              window->ApplyTheme(theme);
+            }
+          }
+        });
   }).detach();
 }
 
@@ -1034,24 +1302,23 @@ winrt::fire_and_forget MainWindow::ShowAbout() {
   auto panel = mxc::StackPanel{};
   panel.Spacing(4);
   auto tagline = mxc::TextBlock{};
-  tagline.Text(L"One keystroke, everything within reach — apps, clipboard, "
-               L"snippets, window management and BYOK AI in one panel");
+  tagline.Text(t("aboutContent"));
   tagline.TextAlignment(mx::TextAlignment::Center);
   tagline.TextWrapping(mx::TextWrapping::Wrap);
   tagline.Margin({0, 0, 0, 8});
   auto license = mxc::TextBlock{};
-  license.Text(L"Business Source License 1.1");
+  license.Text(t("aboutLicense"));
   license.TextAlignment(mx::TextAlignment::Center);
   license.FontSize(12);
   license.Opacity(0.75);
   auto website = mxc::HyperlinkButton{};
-  website.Content(winrt::box_value(L"fulcrum.jrtx.site"));
+  website.Content(winrt::box_value(t("aboutWebsite")));
   website.NavigateUri(
       winrt::Windows::Foundation::Uri{L"https://fulcrum.jrtx.site"});
   website.HorizontalAlignment(mx::HorizontalAlignment::Center);
   website.Padding({0, 0, 0, 0});
   auto issue = mxc::HyperlinkButton{};
-  issue.Content(winrt::box_value(L"github.com/turinglambdaai/fulcrum/issues"));
+  issue.Content(winrt::box_value(t("aboutReportIssue")));
   issue.NavigateUri(winrt::Windows::Foundation::Uri{
       L"https://github.com/turinglambdaai/fulcrum/issues"});
   issue.HorizontalAlignment(mx::HorizontalAlignment::Center);
@@ -1064,7 +1331,7 @@ winrt::fire_and_forget MainWindow::ShowAbout() {
   auto dialog = mxc::ContentDialog{};
   dialog.Title(winrt::box_value(L"Fulcrum v" + to_wide(rivet_app::kVersion)));
   dialog.Content(winrt::box_value(panel));
-  dialog.CloseButtonText(L"Close");
+  dialog.CloseButtonText(t("updateClose"));
   dialog.XamlRoot(Content().XamlRoot());
   co_await dialog.ShowAsync();
 }
@@ -1247,9 +1514,8 @@ void MainWindow::StartSilentUpdateCheck() {
       auto const version = check.available_version.value_or(std::string("?"));
       dispatcher.TryEnqueue([weak, version]() mutable {
         if (auto window = weak.get()) {
-          window->SetStatusOk(L"Update available: Fulcrum v" +
-                              to_wide(version) +
-                              L" — type \"update\" to download");
+          window->SetStatusOk(
+              t_format("updateAvailableStatus", {to_wide(version)}));
         }
       });
     } catch (...) {
@@ -1272,18 +1538,18 @@ void MainWindow::StartUpdateProgressPoll() {
         if (state.phase == "downloaded") {
           dispatcher.TryEnqueue([weak]() mutable {
             if (auto window = weak.get()) {
-              window->SetStatusOk(
-                  L"Update downloaded — type \"update\" to open the "
-                  L"folder, then run the MSI to upgrade");
+              window->SetStatusOk(t("updateDownloadedStatusWin"));
             }
           });
           break;
         }
         if (state.phase == "error") {
-          auto const message = state.message.value_or("update download failed");
+          auto const message = state.message;
           dispatcher.TryEnqueue([weak, message = std::move(message)]() mutable {
             if (auto window = weak.get()) {
-              window->SetStatusError(to_wide(message));
+              std::wstring const detail =
+                  message ? to_wide(*message) : t("updateUnknownError");
+              window->SetStatusError(t_format("updateDownloadFailed", {detail}));
             }
           });
           break;
@@ -1294,10 +1560,9 @@ void MainWindow::StartUpdateProgressPoll() {
         auto const percent = state.percent;
         dispatcher.TryEnqueue([weak, percent]() mutable {
           if (auto window = weak.get()) {
-            std::wstring text = L"Downloading update… ";
-            text += std::to_wstring(percent);
-            text += L"%";
-            window->SetStatusOk(text);
+            window->SetStatusOk(
+                t_format("updateDownloadPercent",
+                         {std::to_wstring(percent)}));
           }
         });
       } catch (...) {

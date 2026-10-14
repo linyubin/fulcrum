@@ -24,13 +24,16 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -335,6 +338,260 @@ bool run_window_command(std::string const& id) {
 
 }  // namespace wincmd
 
+// ---- i18n (about + update surface) ------------------------------------------
+//
+// Strings are keyed exactly like shared/i18n/*.json — the single source of
+// truth shared with the macOS host (I18nService) and the Windows host. The
+// files are flat one-key-per-line JSON objects, so a line-based parser is
+// enough. rivet.rktd declares shared/i18n under `resources`, so builds stage
+// the files beside the host; the embedded fallback table below keeps the
+// same keys for runs where nothing is staged. Lookup: active language → the
+// other language → the key itself. The active language follows the backend's
+// `language` setting, read once in pull_host_settings — a change applies on
+// the next launch, matching this host's one-shot settings pull.
+using I18nTable = std::map<std::string, std::string>;
+
+struct I18nEntry {
+  char const* key;
+  char const* zh;
+  char const* en;
+};
+
+// Only the keys this host renders. The staged JSON (or the mac host's copy
+// of the same table) carries the rest of the about/update surface.
+I18nEntry const kI18nFallback[] = {
+    {"updateAvailableStatus", "发现新版本：Fulcrum v{0} — 输入 “update” 下载",
+     "Update available: Fulcrum v{0} — type \"update\" to download"},
+    {"updateDownloadedStatusLinux",
+     "更新已下载 — 输入 “update” 打开文件夹，解压 tar.gz 完成升级",
+     "Update downloaded — type \"update\" to open the folder, then extract "
+     "the tar.gz to upgrade"},
+    {"updateDownloadFailed", "更新下载失败：{0}",
+     "Update download failed: {0}"},
+    {"updateUnknownError", "未知错误", "unknown error"},
+    {"updateDownloadPercent", "正在下载更新… {0}%",
+     "Downloading update… {0}%"},
+    {"aboutContent",
+     "一键即达 — 应用、剪贴板、片段、窗口管理与 BYOK AI，尽在一个面板",
+     "One keystroke, everything within reach — apps, clipboard, snippets, "
+     "window management and BYOK AI in one panel"},
+    {"aboutLicense", "以 Business Source License 1.1 授权发布",
+     "Released under the Business Source License 1.1"},
+    {"aboutWebsite", "访问官网", "Website"},
+    {"aboutReportIssue", "问题反馈", "Report an Issue"},
+};
+
+I18nTable g_i18n[2];                // 0 = zh, 1 = en
+std::atomic<int> g_i18n_active{1};  // "en" until pull_host_settings reports
+
+// Index of the closing quote for the JSON string starting at `start`
+// (which points at '"'), honoring backslash escapes.
+std::size_t i18n_string_end(std::string const& line, std::size_t start) {
+  for (std::size_t i = start + 1; i < line.size(); ++i) {
+    if (line[i] == '\\') {
+      ++i;
+      continue;
+    }
+    if (line[i] == '"') {
+      return i;
+    }
+  }
+  return std::string::npos;
+}
+
+void i18n_append_utf8(std::string& out, unsigned int code) {
+  if (code < 0x80) {
+    out.push_back(static_cast<char>(code));
+  } else if (code < 0x800) {
+    out.push_back(static_cast<char>(0xC0 | (code >> 6)));
+    out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+  } else if (code < 0x10000) {
+    out.push_back(static_cast<char>(0xE0 | (code >> 12)));
+    out.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+  } else {
+    out.push_back(static_cast<char>(0xF0 | (code >> 18)));
+    out.push_back(static_cast<char>(0x80 | ((code >> 12) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | ((code >> 6) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | (code & 0x3F)));
+  }
+}
+
+std::string i18n_unescape(std::string const& raw) {
+  std::string out;
+  out.reserve(raw.size());
+  for (std::size_t i = 0; i < raw.size(); ++i) {
+    if (raw[i] != '\\') {
+      out.push_back(raw[i]);
+      continue;
+    }
+    if (++i >= raw.size()) {
+      break;
+    }
+    switch (raw[i]) {
+      case '"': out.push_back('"'); break;
+      case '\\': out.push_back('\\'); break;
+      case '/': out.push_back('/'); break;
+      case 'n': out.push_back('\n'); break;
+      case 't': out.push_back('\t'); break;
+      case 'r': out.push_back('\r'); break;
+      case 'b': out.push_back('\b'); break;
+      case 'f': out.push_back('\f'); break;
+      case 'u': {
+        auto const hex4 = [&](std::size_t at, unsigned int& code) -> bool {
+          if (at + 4 > raw.size()) return false;
+          code = 0;
+          for (std::size_t d = 0; d < 4; ++d) {
+            char const h = raw[at + d];
+            code <<= 4;
+            if (h >= '0' && h <= '9') code += static_cast<unsigned int>(h - '0');
+            else if (h >= 'a' && h <= 'f') code += static_cast<unsigned int>(h - 'a') + 10;
+            else if (h >= 'A' && h <= 'F') code += static_cast<unsigned int>(h - 'A') + 10;
+            else return false;
+          }
+          return true;
+        };
+        unsigned int code = 0;
+        if (!hex4(i + 1, code)) {
+          i = raw.size();
+          break;
+        }
+        i += 4;
+        if (code >= 0xD800 && code <= 0xDBFF && i + 6 < raw.size() &&
+            raw[i + 1] == '\\' && raw[i + 2] == 'u') {
+          unsigned int low = 0;
+          if (hex4(i + 3, low) && low >= 0xDC00 && low <= 0xDFFF) {
+            code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
+            i += 6;
+          }
+        }
+        i18n_append_utf8(out, code);
+        break;
+      }
+      default:
+        out.push_back(raw[i]);
+        break;
+    }
+  }
+  return out;
+}
+
+// Tolerant loader for the flat "key": "value" table. Returns true when at
+// least one entry was read; a malformed line is skipped, never fatal.
+bool load_i18n_file(char const* path, int lang) {
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return false;
+  }
+  std::string bytes((std::istreambuf_iterator<char>(file)),
+                    std::istreambuf_iterator<char>());
+  if (bytes.size() >= 3 && bytes[0] == '\xEF' && bytes[1] == '\xBB' &&
+      bytes[2] == '\xBF') {
+    bytes.erase(0, 3);  // tolerate a BOM; the generator does not emit one
+  }
+  if (bytes.empty()) {
+    return false;
+  }
+  auto& table = g_i18n[lang];
+  bool loaded_any = false;
+  std::size_t begin = 0;
+  while (begin < bytes.size()) {
+    auto end = bytes.find('\n', begin);
+    if (end == std::string::npos) {
+      end = bytes.size();
+    }
+    std::string line = bytes.substr(begin, end - begin);
+    begin = end + 1;
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+
+    auto const key_start = line.find('"');
+    if (key_start == std::string::npos) {
+      continue;
+    }
+    auto const key_end = i18n_string_end(line, key_start);
+    if (key_end == std::string::npos) {
+      continue;
+    }
+    auto const colon = line.find(':', key_end);
+    if (colon == std::string::npos) {
+      continue;
+    }
+    auto const value_start = line.find('"', colon + 1);
+    if (value_start == std::string::npos) {
+      continue;
+    }
+    auto const value_end = i18n_string_end(line, value_start);
+    if (value_end == std::string::npos) {
+      continue;
+    }
+    table[line.substr(key_start + 1, key_end - key_start - 1)] =
+        i18n_unescape(line.substr(value_start + 1,
+                                  value_end - value_start - 1));
+    loaded_any = true;
+  }
+  return loaded_any;
+}
+
+void load_i18n(std::filesystem::path const& exe_dir) {
+  char const* names[] = {"zh.json", "en.json"};
+  for (int lang = 0; lang < 2; ++lang) {
+    auto& table = g_i18n[lang];
+    table.clear();
+    for (auto const& entry : kI18nFallback) {
+      table.emplace(entry.key, lang == 0 ? entry.zh : entry.en);
+    }
+    // Staged product resources: rivet.rktd declares shared/i18n under
+    // `resources`, so packages carry it at <dir>/app/shared/i18n; the dev
+    // tree wins for `raco rivet dev` runs where nothing is packaged yet
+    // (.rivet/stage holds the host binary one level below the repo root).
+    std::filesystem::path const candidates[] = {
+        exe_dir / "app" / "shared" / "i18n",
+        exe_dir / ".." / "shared" / "i18n",  // dev tree
+    };
+    for (auto const& dir : candidates) {
+      auto const path = dir / names[lang];
+      std::error_code ec;
+      if (!std::filesystem::exists(path, ec)) {
+        continue;
+      }
+      if (load_i18n_file(path.c_str(), lang)) {
+        break;
+      }
+    }
+  }
+}
+
+void set_i18n_language(std::string const& lang) {
+  g_i18n_active = (lang == "en") ? 1 : 0;
+}
+
+std::string tr(char const* key) {
+  int const active = g_i18n_active.load(std::memory_order_relaxed);
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    auto const& table = g_i18n[(active + attempt) % 2];
+    auto const it = table.find(key);
+    if (it != table.end()) {
+      return it->second;
+    }
+  }
+  return key;
+}
+
+// Positional formatting: first argument replaces {0}, and so on.
+std::string tr_format(char const* key, std::vector<std::string> const& args) {
+  std::string out = tr(key);
+  for (std::size_t i = 0; i < args.size(); ++i) {
+    std::string const token = "{" + std::to_string(i) + "}";
+    auto const pos = out.find(token);
+    if (pos != std::string::npos) {
+      out.replace(pos, token.size(), args[i]);
+    }
+  }
+  return out;
+}
+
 // ---- about ----------------------------------------------------------------
 
 // The launcher row `about.open` (the backend ranks it, the host renders
@@ -344,17 +601,17 @@ void show_about_dialog(GtkWindow* parent) {
   auto* dialog = gtk_about_dialog_new();
   gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Fulcrum");
   gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), rivet_app::kVersion);
-  gtk_about_dialog_set_comments(
-      GTK_ABOUT_DIALOG(dialog),
-      "One keystroke, everything within reach — apps, clipboard, snippets, "
-      "window management and BYOK AI in one panel\n"
-      "Feedback: github.com/turinglambdaai/fulcrum/issues");
-  gtk_about_dialog_set_license(GTK_ABOUT_DIALOG(dialog),
-                               "Business Source License 1.1");
+  std::string const comments =
+      tr("aboutContent") + "\n" + tr("aboutReportIssue") +
+      ": github.com/turinglambdaai/fulcrum/issues";
+  gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog), comments.c_str());
+  std::string const license = tr("aboutLicense");
+  gtk_about_dialog_set_license(GTK_ABOUT_DIALOG(dialog), license.c_str());
   gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog),
                                "https://fulcrum.jrtx.site");
+  std::string const website_label = tr("aboutWebsite");
   gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog),
-                                     "fulcrum.jrtx.site");
+                                     website_label.c_str());
   gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
   gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   gtk_window_present(GTK_WINDOW(dialog));
@@ -485,8 +742,9 @@ struct Launcher {
   }
 
   // One-time read of the backend-owned settings the host renders (hotkey,
-  // theme). The backend pushes changes afterwards via the reserved $state
-  // events; this seeds the initial values.
+  // theme) plus the `language` key that steers the i18n table. The backend
+  // pushes hotkey/theme changes afterwards via the reserved $state events;
+  // this seeds the initial values.
   void pull_host_settings() {
     if (api == nullptr) {
       return;
@@ -495,6 +753,7 @@ struct Launcher {
     std::thread([api_raw]() mutable {
       std::string hotkey;
       std::string theme;
+      std::string language;
       try {
         hotkey = api_raw->get_hotkey().get();
       } catch (...) {
@@ -503,21 +762,34 @@ struct Launcher {
         theme = api_raw->get_theme().get();
       } catch (...) {
       }
+      try {
+        // Row shape per the backend settings-list contract: [key, value, …].
+        for (auto const& row : api_raw->settings_list().get()) {
+          if (row.size() >= 2 && row[0] == "language") {
+            language = row[1];
+          }
+        }
+      } catch (...) {
+      }
       g_idle_add([](gpointer user_data) -> int {
-        std::unique_ptr<std::pair<std::string, std::string>> values(
-            static_cast<std::pair<std::string, std::string>*>(user_data));
+        std::unique_ptr<std::tuple<std::string, std::string, std::string>>
+            values(static_cast<std::tuple<std::string, std::string,
+                                          std::string>*>(user_data));
+        auto const& [hotkey, theme, language] = *values;
         Launcher& launcher = Launcher::instance();
-        if (!values->first.empty()) {
-          std::string note = apply_x11_hotkey(values->first);
+        set_i18n_language(language);
+        if (!hotkey.empty()) {
+          std::string note = apply_x11_hotkey(hotkey);
           if (!note.empty()) {
             launcher.set_status(note);
           }
         }
-        if (!values->second.empty()) {
-          apply_theme(values->second);
+        if (!theme.empty()) {
+          apply_theme(theme);
         }
         return G_SOURCE_REMOVE;
-      }, new std::pair<std::string, std::string>(hotkey, theme));
+      }, new std::tuple<std::string, std::string, std::string>(
+             std::move(hotkey), std::move(theme), std::move(language)));
     }).detach();
   }
 
@@ -581,9 +853,8 @@ struct Launcher {
         if (check.status != "available") {
           return;
         }
-        post_status("Update available: Fulcrum v" +
-                    check.available_version.value_or("?") +
-                    " — type \"update\" to download");
+        post_status(tr_format("updateAvailableStatus",
+                              {check.available_version.value_or("?")}));
       } catch (...) {
         // silent: network down, feed unreachable — never nag
       }
@@ -603,19 +874,20 @@ struct Launcher {
         try {
           auto const state = api_raw->update_state().get();
           if (state.phase == "downloaded") {
-            post_status("Update downloaded — type \"update\" to open the "
-                        "folder, then extract the tar.gz to upgrade");
+            post_status(tr("updateDownloadedStatusLinux"));
             break;
           }
           if (state.phase == "error") {
-            post_status("Update download failed: " +
-                        state.message.value_or("unknown error"));
+            post_status(tr_format(
+                "updateDownloadFailed",
+                {state.message.value_or(tr("updateUnknownError"))}));
             break;
           }
           if (state.phase != "downloading") {
             break;
           }
-          post_status("Downloading update… " + std::to_string(state.percent) + "%");
+          post_status(tr_format("updateDownloadPercent",
+                                {std::to_string(state.percent)}));
         } catch (...) {
           break;
         }
@@ -1535,6 +1807,10 @@ int main(int argc, char** argv) {
     }
   }
   lease.set_activation_handler(on_activation);
+
+  // Load the i18n tables before any UI string is composed: the staged
+  // shared/i18n JSON when packaged, the embedded fallback otherwise.
+  load_i18n(executable_path().parent_path());
 
   XInitThreads();
   auto* app =
