@@ -32,29 +32,6 @@
 
 ;; ---- search ---------------------------------------------------------------
 
-;; Returns three values: program (or #f), args, and a parser function
-;; that turns raw output into (name path) pairs.
-(define (search-command query)
-  (case (system-type 'os)
-    [(macosx)
-     (values "mdfind" (list "-name" query) parse-paths)]
-    [(unix)
-     (if (not (false? (resolve-program "locate")))
-         (values "locate" (list "-i" "-l" "8" query) parse-paths)
-         (values "find"
-                 (list (path->string (find-system-path 'home-dir))
-                       "-maxdepth" "4"
-                       "-iname" (string-append "*" query "*")
-                       "-type" "f")
-                 parse-paths))]
-    [(windows)
-     (values "powershell.exe"
-             (list "-NoProfile" "-Command"
-                   (format "Get-ChildItem -Path ~a -Recurse -Depth 3 -Filter '*~a*' -File | Select-Object -First 8 -ExpandProperty FullName"
-                           "$env:USERPROFILE" query))
-             parse-paths)]
-    [else (values #f '() parse-paths)]))
-
 ;; Universal path-list parser: newline-separated absolute paths →
 ;; (name path) pairs, bounded and deduplicated. Works for mdfind, locate,
 ;; find, and PowerShell output alike.

@@ -664,14 +664,6 @@
 ;; maps "<pid>:<cid>" → hash(arg → (actions detail-request?)).
 (define results-cache (box (make-hash)))
 
-(define (remember-results! command-key results)
-  (define table (make-hash))
-  (for ([r (in-list results)])
-    (hash-set! table (list-ref r 2)
-               (cons (list-ref r 5) (list-ref r 6)))
-    )
-  (hash-set! (unbox results-cache) command-key table))
-
 (define/contract (plugin-manager-query mgr query)
   (-> plugin-manager? string?
       (listof (list/c string? string? string? string? string? boolean?)))
