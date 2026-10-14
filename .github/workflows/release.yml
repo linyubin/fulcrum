@@ -148,10 +148,14 @@ jobs:
           case "${{ matrix.platform }}" in
             macos)
               mv dist/fulcrum-*.dmg "fulcrum-${VERSION}-macos-${ARCH}.dmg"
-              (cd dist && zip -qry "../fulcrum-${VERSION}-macos-${ARCH}.zip" fulcrum.app)
-              # rivet release also leaves a portable zip in dist/; the hand
-              # zip above is the same payload — drop the duplicate.
-              rm -f dist/fulcrum-*-macos-*.zip dist/fulcrum-*-macos-*.zip.sha256
+              # rivet v0.11 removes the unpacked .app from dist/ once the
+              # installers are built; its portable zip (the same payload
+              # the update feed serves) already carries the arch suffix —
+              # adopt it instead of re-zipping the deleted tree.
+              test -f "dist/fulcrum-${VERSION}-macos-${ARCH}.zip"
+              test -f "dist/fulcrum-${VERSION}-macos-${ARCH}.zip.sha256"
+              mv "dist/fulcrum-${VERSION}-macos-${ARCH}.zip" \
+                 "dist/fulcrum-${VERSION}-macos-${ARCH}.zip.sha256" .
               ;;
             windows)
               mv dist/fulcrum-*-windows-*.msi "fulcrum-${VERSION}-windows-x64.msi"
