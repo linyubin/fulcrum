@@ -5,10 +5,10 @@
 ;; Trust model (inherited from Rivet): HTTPS protects transport but is not
 ;; the root of update trust. The channel manifest is Ed25519-signed and
 ;; verified against the public key embedded below before any version
-;; decision. Key management lives in docs/release-runbook.md: key generation,
-;; the exact replacement of `current-update-public-key-hex`, and rotation via
-;; `current-update-key-id` (ship a client trusting the next key before
-;; signing with it).
+;; decision. Key management lives in docs/release-runbook.md: key
+;; generation, the committed public half (`current-update-public-key-hex`,
+;; updated only for rotation), and rotation via `current-update-key-id`
+;; (ship a client trusting the next key before signing with it).
 ;;
 ;; The family pattern (taskly/rivet): the backend verifies and downloads the
 ;; signed update artifact; the native host owns installation. A check fetches

@@ -32,23 +32,28 @@ reads the version from `rivet.rktd` when composing the channel manifest.
 For the developer preview on the `main` branch this is enough; production
 steps continue below.
 
-## 2. Update key embedding (release builds only)
+## 2. Update key embedding
 
-`app/update.rkt` carries `current-update-public-key-hex`. For release
-builds, replace it with the hex of `update-public.der`:
+The Ed25519 verification key ships as source, not a build-time
+substitution: `app/update.rkt` commits `current-update-public-key-hex`
+(DER SPKI, hex) and `update-key-id` permanently — the public half only
+enables verification, so developer builds and release builds verify
+updates identically and there is no key step in packaging. The private
+half never enters a checkout: it lives in the keys vault and in the
+`RIVET_UPDATE_PRIVATE_KEY` repository secret (PEM; the release pipeline
+converts it to DER for `raco rivet release` and for the channel-manifest
+signer, which takes the matching `RIVET_UPDATE_KEY_ID`).
+
+Key rotation: generate a new pair (§0), replace the committed hex and key
+id —
 
 ```bash
-openssl pkey -inform DER -in update-public.der -outform DER -out /dev/null 2>/dev/null
 xxd -p update-public.der | tr -d '\n'   # → current-update-public-key-hex
 ```
 
-Set `current-update-key-id` to the same key id used when signing the
-manifest (e.g. `release-2026`). Developer builds keep `#f` — update checks
-then honestly report "developer build" instead of pretending.
-
-Key rotation: generate a new pair, ship a client trusting the **next**
-public key first, then sign releases exclusively with it. The `key_id`
-field is what makes the overlap safe.
+— ship a client trusting the **next** public key first, then sign
+releases exclusively with it. The `key_id` field is what makes the
+overlap safe.
 
 ## 3. Tagged pipeline
 

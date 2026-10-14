@@ -20,7 +20,7 @@ Linux stack (GNOME's supported toolkit, same role WinUI 3 and SwiftUI play
 on Windows/macOS), so the scope argument that excludes Linux may not apply.
 This issue proposes `platform/linux/` and offers a validated prototype.
 
-**Prototype:** [`turinglambdaai/fulcrum` → `linux-host/`](https://github.com/turinglambdaai/fulcrum/tree/main/linux-host) — built for
+**Prototype:** [`turinglambdaai/fulcrum` → `linux/`](https://github.com/turinglambdaai/fulcrum/tree/main/linux) — built for
 Fulcrum (a Rivet application), compiles as a CI smoke, runs headless under
 Xvfb; not yet wired into `raco rivet build`.
 
