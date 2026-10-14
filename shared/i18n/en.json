@@ -19,5 +19,9 @@
   "updateInstallHintMac": "To install manually: mount the downloaded DMG and drag Fulcrum onto Applications.",
   "updateInstallHintWin": "To install manually: double-click the downloaded MSI and follow the wizard (Fulcrum may keep running).",
   "updateInstallHintLinux": "To install manually: extract the downloaded tar.gz over the current Fulcrum folder and relaunch.",
-  "updateOpenReleases": "Open Releases Page"
+  "updateOpenReleases": "Open Releases Page",
+  "aboutContent": "One keystroke, everything within reach — apps, clipboard, snippets, window management and BYOK AI in one panel",
+  "aboutLicense": "Released under the Business Source License 1.1",
+  "aboutWebsite": "Website",
+  "aboutReportIssue": "Report an Issue"
 }

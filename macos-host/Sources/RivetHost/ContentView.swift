@@ -701,9 +701,12 @@ final class LauncherModel: ObservableObject {
                         self.status = I18nService.shared.t("updateDownloading")
                         self.hide()
                     case "delegated":
-                        // Window commands execute natively: the backend
-                        // cannot reach other apps' windows.
-                        if WindowCommands.performAndRemember(id: row.id) {
+                        // Host-native actions: the backend cannot reach
+                        // other apps' windows or this app's About panel.
+                        if row.id == "about.open" {
+                            AppDelegate.shared?.showAboutPanel()
+                            self.hide()
+                        } else if WindowCommands.performAndRemember(id: row.id) {
                             self.hide()
                         } else {
                             self.status = WindowCommands.permissionHint

@@ -16,7 +16,8 @@ namespace {
 constexpr UINT kTrayCallbackMessage = WM_APP + 1;
 constexpr UINT kTrayIconId = 0xF11D;
 constexpr int kTrayMenuOpen = 1;
-constexpr int kTrayMenuQuit = 2;
+constexpr int kTrayMenuAbout = 2;
+constexpr int kTrayMenuQuit = 3;
 
 constexpr int kHotkeyIdPrimary = 0xF11C;  // Alt+Space
 constexpr int kHotkeyIdFallback = 0xF11D; // Ctrl+Alt+Space
@@ -491,6 +492,7 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
       HMENU menu = ::CreatePopupMenu();
       if (menu != nullptr) {
         ::AppendMenuW(menu, MF_STRING, kTrayMenuOpen, L"Open Fulcrum");
+        ::AppendMenuW(menu, MF_STRING, kTrayMenuAbout, L"About Fulcrum");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuQuit, L"Quit Fulcrum");
         ::SetForegroundWindow(hwnd);  // so outside clicks dismiss the menu
         int const choice = ::TrackPopupMenu(
@@ -498,6 +500,8 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
         ::DestroyMenu(menu);
         if (choice == kTrayMenuOpen) {
           ShowLauncher();
+        } else if (choice == kTrayMenuAbout) {
+          ShowAbout();
         } else if (choice == kTrayMenuQuit) {
           this->AppWindow().Destroy();
         }
@@ -993,9 +997,11 @@ void MainWindow::RunSelected() {
             window->HideLauncher();
             window->StartUpdateProgressPoll();
           } else if (status == "delegated") {
-            // Window commands execute natively: the backend cannot reach
-            // other apps' windows.
-            if (fulcrum::RunWindowCommand(row.id)) {
+            // Host-native actions: window commands reach other apps'
+            // windows; about.open renders this app's about dialog.
+            if (row.id == "about.open") {
+              window->ShowAbout();
+            } else if (fulcrum::RunWindowCommand(row.id)) {
               window->HideLauncher();
             } else {
               window->SetStatusError(L"No window found to manage.");
@@ -1014,6 +1020,53 @@ void MainWindow::RunSelected() {
       });
     }
   }).detach();
+}
+
+// ---- about ----------------------------------------------------------------
+
+// The tray menu's "About Fulcrum" and the `about` launcher row land here:
+// one ContentDialog with version, tagline, license and the site/issue
+// links (taskly's OnAbout shape).
+winrt::fire_and_forget MainWindow::ShowAbout() {
+  namespace mxc = winrt::Microsoft::UI::Xaml::Controls;
+  namespace mx = winrt::Microsoft::UI::Xaml;
+
+  auto panel = mxc::StackPanel{};
+  panel.Spacing(4);
+  auto tagline = mxc::TextBlock{};
+  tagline.Text(L"One keystroke, everything within reach — apps, clipboard, "
+               L"snippets, window management and BYOK AI in one panel");
+  tagline.TextAlignment(mx::TextAlignment::Center);
+  tagline.TextWrapping(mx::TextWrapping::Wrap);
+  tagline.Margin({0, 0, 0, 8});
+  auto license = mxc::TextBlock{};
+  license.Text(L"Business Source License 1.1");
+  license.TextAlignment(mx::TextAlignment::Center);
+  license.FontSize(12);
+  license.Opacity(0.75);
+  auto website = mxc::HyperlinkButton{};
+  website.Content(winrt::box_value(L"fulcrum.jrtx.site"));
+  website.NavigateUri(
+      winrt::Windows::Foundation::Uri{L"https://fulcrum.jrtx.site"});
+  website.HorizontalAlignment(mx::HorizontalAlignment::Center);
+  website.Padding({0, 0, 0, 0});
+  auto issue = mxc::HyperlinkButton{};
+  issue.Content(winrt::box_value(L"github.com/turinglambdaai/fulcrum/issues"));
+  issue.NavigateUri(winrt::Windows::Foundation::Uri{
+      L"https://github.com/turinglambdaai/fulcrum/issues"});
+  issue.HorizontalAlignment(mx::HorizontalAlignment::Center);
+  issue.Padding({0, 0, 0, 0});
+  panel.Children().Append(tagline);
+  panel.Children().Append(license);
+  panel.Children().Append(website);
+  panel.Children().Append(issue);
+
+  auto dialog = mxc::ContentDialog{};
+  dialog.Title(winrt::box_value(L"Fulcrum v" + to_wide(rivet_app::kVersion)));
+  dialog.Content(winrt::box_value(panel));
+  dialog.CloseButtonText(L"Close");
+  dialog.XamlRoot(Content().XamlRoot());
+  co_await dialog.ShowAsync();
 }
 
 // ---- snippet auto-expansion ----------------------------------------------

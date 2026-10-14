@@ -64,7 +64,7 @@
 ;; update check: drift here means every install believes it is outdated
 ;; (0.2.0 shipped believing it was 0.1.0).
 (define app-version
-  (with-handlers ([exn:fail? (lambda (_) "0.10.0")])
+  (with-handlers ([exn:fail? (lambda (_) "0.10.1")])
     (string-append (rivet-info:app-version))))
 
 ;; The updater learns the running version from here (the packaged app reads
@@ -180,7 +180,8 @@
 ;; put those rows first — twelve fuzzy app hits must not bury the settings
 ;; list below the fold.
 (define backend-surface-words
-  '("ai" "settings" "quicklinks" "links" "gallery" "plugins" "update" "updates"))
+  '("ai" "about" "settings" "quicklinks" "links" "gallery" "plugins"
+    "update" "updates"))
 
 (define (settings-quick-rows)
   (for/list ([key (in-list '(theme hotkey language ai-provider))])
@@ -200,6 +201,25 @@
           "setting" "" ""
           (format "~a" val))))
 
+;; ---- about-as-rows --------------------------------------------------------
+;;
+;; The launcher is also the About surface (the hosts have no dedicated
+;; about menu on Windows/Linux): query `about` lists one row each host
+;; maps to its native about panel — version, website, feedback, license.
+
+(define (about-rows query)
+  (define trimmed (string-trim query))
+  (if (or (member (string-downcase trimmed) '("about" "about fulcrum"))
+          (fuzzy-score-fields
+           trimmed
+           (list (cons 1.0 "about")
+                 (cons 0.5 "version license website feedback"))))
+      (list (list "about.open"
+                  "About Fulcrum"
+                  (format "v~a · website, feedback and license" app-version)
+                  "About" "" "about" "" ""))
+      '()))
+
 (define (rows-for engine query)
   (define rows (engine-search engine query))
   ;; Discoverability: an empty query always shows a Settings row so the
@@ -217,14 +237,16 @@
     (let ([pc (plugin-center-rows query)]
           [sr (settings-rows query)]
           [ar (append (ai-rows query) (ai-ask-row query))]
-          [ur (update-rows query)])
+          [ur (update-rows query)]
+          [ab (about-rows query)])
       ;; The surface the query names leads its own rows.
       (case (string-trim (string-downcase query))
-        [("plugins" "plugin") (append pc sr ar ur)]
-        [("ai") (append ar sr pc ur)]
-        [("update" "updates") (append ur sr ar pc)]
-        [("settings") (append sr ar pc ur)]
-        [else (append sr ar pc ur)])))
+        [("about") (append ab sr ar pc ur)]
+        [("plugins" "plugin") (append pc sr ar ur ab)]
+        [("ai") (append ar sr pc ur ab)]
+        [("update" "updates") (append ur sr ar pc ab)]
+        [("settings") (append sr ar pc ur ab)]
+        [else (append sr ar pc ur ab)])))
   (append settings-entry
     (if (member (string-trim (string-downcase query)) backend-surface-words)
       (append backend-rows filtered)
@@ -1145,6 +1167,10 @@
        ;; on the clipboard, ready to paste into a fresh query.
        (cons "copied" (list (cons 'copy-to-clipboard arg)))]
       [(string-prefix? id "plugins.") (plugins-act! (engine!) id arg)]
+      [(string=? id "about.open")
+       ;; About is host-native: every host maps this row to its own about
+       ;; panel/dialog (same delegation shape as the win.* commands).
+       (cons "delegated" '())]
       [(string-prefix? id "update.") (update-act! id)]
       [else (engine-run (engine!) id arg)]))
   (emit-events! (cdr outcome))

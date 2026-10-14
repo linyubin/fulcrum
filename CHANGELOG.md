@@ -4,6 +4,43 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
+## [Unreleased]
+
+Foundation round — the launcher finally answers "what is this and where
+do I report it", on every host.
+
+### Added
+
+- **About, on all three hosts.** Query `about` in the launcher and the
+  backend ranks one `about.open` row (version, website, feedback,
+  license); running it delegates host-native — a native About window on
+  macOS, a GTK about dialog on Linux, a ContentDialog on Windows. The
+  panel is reachable without the row too: macOS grows an "About Fulcrum"
+  menu-bar item and its long-empty Settings scene now shows the About
+  panel; Windows gains "About Fulcrum" in the tray menu. Every panel
+  carries the version line, the site (fulcrum.jrtx.site), the issue
+  tracker and "Business Source License 1.1" (macOS strings ride the
+  shared/i18n single source — new `about*` keys, zh and en).
+- **GitHub issue templates** (bug report + feature request) so feedback
+  from the About links lands structured: the bug form asks for the
+  platform pair, install shape and hotkey setup, and never for an AI key.
+
+### Fixed
+
+- **The backend's headless version fallback drifted**: the `must track
+  rivet.rktd` literal in `app/backend.rkt` still said 0.10.0 after
+  0.10.1 shipped, so every headless run (tests, dev loops) believed it
+  was outdated. It now reads 0.10.1, and `check-release-version.sh`
+  grew a fourth gate — VERSION == rivet.rktd == backend fallback == tag —
+  so the literal can never drift again.
+
+### Changed
+
+- **Update failure text is selectable** in the macOS update panel's
+  failed state, so the exact error can be copied into a bug report
+  instead of retyped (Windows' status line already had its copy
+  affordance; Linux' status label is selectable).
+
 ## [0.10.1] - 2026-10-14
 
 Engineering-alignment patch — no feature changes to the launcher

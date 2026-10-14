@@ -335,6 +335,31 @@ bool run_window_command(std::string const& id) {
 
 }  // namespace wincmd
 
+// ---- about ----------------------------------------------------------------
+
+// The launcher row `about.open` (the backend ranks it, the host renders
+// it): a native GTK about dialog — version, tagline, feedback pointer,
+// license, website.
+void show_about_dialog(GtkWindow* parent) {
+  auto* dialog = gtk_about_dialog_new();
+  gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Fulcrum");
+  gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), rivet_app::kVersion);
+  gtk_about_dialog_set_comments(
+      GTK_ABOUT_DIALOG(dialog),
+      "One keystroke, everything within reach — apps, clipboard, snippets, "
+      "window management and BYOK AI in one panel\n"
+      "Feedback: github.com/turinglambdaai/fulcrum/issues");
+  gtk_about_dialog_set_license(GTK_ABOUT_DIALOG(dialog),
+                               "Business Source License 1.1");
+  gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog),
+                               "https://fulcrum.jrtx.site");
+  gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog),
+                                     "fulcrum.jrtx.site");
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
 // ---- application state ---------------------------------------------------
 
 struct Launcher {
@@ -903,6 +928,13 @@ struct Launcher {
       g_idle_add([](gpointer user_data) -> int {
         std::unique_ptr<RunOutcome> job(static_cast<RunOutcome*>(user_data));
         if (job->success) {
+          // About rides "delegated": the backend ranks the row, the host
+          // renders its native about dialog (main thread: GTK owns the
+          // widgets here).
+          if (job->action_id == "about.open") {
+            show_about_dialog(Launcher::instance().window);
+            return G_SOURCE_REMOVE;
+          }
           // Window commands ride "delegated": the backend ranks the rows,
           // the host performs the native window move on the frontmost
           // X11 window (main thread: GDK owns the display here).

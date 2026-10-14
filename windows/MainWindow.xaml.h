@@ -120,6 +120,9 @@ struct MainWindow : MainWindowT<MainWindow> {
   // "update" launcher rows drive check/download/reveal on this state.
   void StartSilentUpdateCheck();
   void StartUpdateProgressPoll();
+  // About panel (tray menu + the `about` launcher row): one ContentDialog
+  // with version, tagline, license and the site/issue links.
+  winrt::fire_and_forget ShowAbout();
 
   std::shared_ptr<rivet::windows::Backend> backend_;
   std::unique_ptr<rivet_app::API> api_;

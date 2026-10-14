@@ -154,6 +154,9 @@ struct UpdatePanelView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                // Failure text (URLs, manifest errors) must leave the
+                // screen with the user — selectable for a bug report.
+                .textSelection(.enabled)
                 .frame(maxWidth: 320)
             HStack(spacing: 10) {
                 Button(controller.t("updateClose")) {

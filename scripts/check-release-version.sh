@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Release preflight: VERSION == rivet.rktd == tag. Runs in CI (no argument)
-# and in every release packaging job (tag as $1). rivet.rktd is the version
-# source the signed channel manifest (.github/sign-manifest.rkt) reads, so
-# this gate pins all three to one value.
+# Release preflight: VERSION == rivet.rktd == the backend's headless
+# fallback literal == tag. Runs in CI (no argument) and in every release
+# packaging job (tag as $1). rivet.rktd is the version source the signed
+# channel manifest (.github/sign-manifest.rkt) reads, so this gate pins
+# all four to one value.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,8 +30,14 @@ RIVET_RKTD_VERSION="$(grep -o '"[0-9]*\.[0-9]*\.[0-9]*"' "$ROOT/rivet.rktd" | he
 [[ "$RIVET_RKTD_VERSION" == "$VERSION" ]] || \
   fail "rivet.rktd version '$RIVET_RKTD_VERSION' does not match VERSION '$VERSION'"
 
+# The backend's headless fallback literal (must track rivet.rktd; it feeds
+# the update check when rivet-app-info.rktd is absent — drift here means
+# every headless run believes it is outdated).
+grep -qF "(lambda (_) \"$VERSION\")" "$ROOT/app/backend.rkt" || \
+  fail "app/backend.rkt fallback version does not match VERSION '$VERSION'"
+
 if [[ -n "$TAG" ]]; then
-  echo "release preflight: version $VERSION is aligned (VERSION == rivet.rktd == tag)"
+  echo "release preflight: version $VERSION is aligned (VERSION == rivet.rktd == backend fallback == tag)"
 else
-  echo "release preflight: version $VERSION is aligned (VERSION == rivet.rktd)"
+  echo "release preflight: version $VERSION is aligned (VERSION == rivet.rktd == backend fallback)"
 fi

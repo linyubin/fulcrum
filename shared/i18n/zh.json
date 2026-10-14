@@ -19,5 +19,9 @@
   "updateInstallHintMac": "安装方法：挂载下载的 DMG，将 Fulcrum 拖入「应用程序」替换现有版本。",
   "updateInstallHintWin": "安装方法：双击下载的 MSI 安装包，按安装向导升级（Fulcrum 可以保持运行）。",
   "updateInstallHintLinux": "安装方法：解压下载的 tar.gz，替换当前 Fulcrum 目录后重新启动。",
-  "updateOpenReleases": "打开发布页"
+  "updateOpenReleases": "打开发布页",
+  "aboutContent": "一键即达 — 应用、剪贴板、片段、窗口管理与 BYOK AI，尽在一个面板",
+  "aboutLicense": "以 Business Source License 1.1 授权发布",
+  "aboutWebsite": "访问官网",
+  "aboutReportIssue": "问题反馈"
 }

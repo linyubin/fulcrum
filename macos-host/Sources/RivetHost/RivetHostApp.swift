@@ -12,7 +12,10 @@ struct FulcrumApp: App {
 
     var body: some Scene {
         Settings {
-            EmptyView()
+            // The Settings scene is the About panel: version, website,
+            // feedback and license — the launcher has no other chrome to
+            // hang an About menu on.
+            AboutPanelView()
         }
     }
 }
@@ -39,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Update flow (updater 0.2): panel window + RPC orchestration.
     private var updateController: UpdateController?
     private var updateWindow: NSWindow?
+    // About panel (Settings scene + menu bar + the `about` launcher row).
+    private var aboutWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One instance owns the global hotkey; second launches exit here via
@@ -139,6 +144,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.contentView = NSHostingView(rootView: UpdatePanelView(controller: controller))
         return window
+    }
+
+    // MARK: about panel
+
+    /// About lives in its own small window: the launcher panel is
+    /// transient (Esc hides it), while the About panel must survive focus
+    /// changes until the user dismisses it.
+    nonisolated func showAboutPanel() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if let window = self.aboutWindow {
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                return
+            }
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 340, height: 240),
+                                  styleMask: [.titled, .closable],
+                                  backing: .buffered, defer: false)
+            window.title = "About Fulcrum"
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.contentView = NSHostingView(rootView: AboutPanelView())
+            self.aboutWindow = window
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     // MARK: panel
@@ -363,6 +394,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let self else { return }
                     self.updateController?.checkForUpdates()
                     self.showUpdatePanel()
+                }),
+                ("About Fulcrum", "about", { [weak self] in
+                    self?.showAboutPanel()
                 }),
                 ("Quit Fulcrum", "quit", {
                     NSApp.terminate(nil)
