@@ -99,8 +99,9 @@
             <p class="lead animate-on-scroll" data-i18n="hero.lead">Fulcrum（支点）是 macOS、Windows 与 Linux 上的键盘优先启动器。按下全局热键，浮出命令面板：模糊搜索应用与文件、回溯剪贴板历史、展开片段、随手计算、发起网络搜索、运行插件——一切都在本机完成。</p>
 
             <div class="hero-buttons animate-on-scroll">
-                <a href="https://github.com/turinglambdaai/fulcrum" class="btn btn-primary" data-i18n="hero.cta-primary">抢先体验</a>
+                <a href="https://github.com/turinglambdaai/fulcrum/releases/latest/download/fulcrum-macos-arm64.dmg" class="btn btn-primary" data-i18n="hero.cta-primary">下载 macOS 版</a>
                 <a href="https://github.com/turinglambdaai/fulcrum/tree/main/docs" class="btn btn-secondary" data-i18n="hero.cta-docs">阅读文档</a>
+                <a href="https://github.com/turinglambdaai/fulcrum/releases" class="btn btn-secondary" data-i18n="hero.all-releases">全部版本</a>
             </div>
 
             <div class="hero-visual animate-on-scroll">
@@ -422,6 +423,39 @@
     </footer>
 
     <script>
+        // Platform-aware direct download: point the hero CTA at the stable
+        // versionless alias for the visitor's OS and switch its i18n key
+        // before the language pass below runs, so the label matches too.
+        (function () {
+            var BASE = 'https://github.com/turinglambdaai/fulcrum/releases/latest/download/';
+            var ua = navigator.userAgent;
+            var os = /Windows/i.test(ua) ? 'win' : (/Mac|iPhone|iPad/i.test(ua) ? 'mac' : (/Linux|X11/i.test(ua) ? 'linux' : 'mac'));
+            // Linux UAs reveal ARM; macOS UAs do not, so mac defaults to the
+            // Apple Silicon build (the majority); Chromium refines below.
+            var arch = os === 'linux' && /aarch64|arm/i.test(ua) ? 'arm64' : (os === 'linux' ? 'x64' : 'arm64');
+            var file = {
+                mac: 'fulcrum-macos-' + arch + '.dmg',
+                win: 'fulcrum-windows-x64.msi',
+                linux: 'fulcrum-linux-' + arch + '.AppImage'
+            }[os];
+            var url = BASE + file;
+            var key = 'hero.cta-' + { mac: 'mac', win: 'win', linux: 'linux' }[os];
+            document.querySelectorAll('a[data-i18n="hero.cta-primary"]').forEach(function (a) {
+                a.href = url;
+                a.setAttribute('data-i18n', key);
+            });
+            if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+                navigator.userAgentData.getHighEntropyValues(['architecture', 'platform']).then(function (h) {
+                    if (!h || /Windows/i.test(h.platform || '')) return; // windows ships x64-only
+                    var a = h.architecture === 'arm' ? 'arm64' : (h.architecture === 'x86' ? 'x64' : null);
+                    if (!a || a === arch) return;
+                    var f = os === 'mac' ? 'fulcrum-macos-' + a + '.dmg' : 'fulcrum-linux-' + a + '.AppImage';
+                    document.querySelectorAll('a[href="' + url + '"]').forEach(function (x) { x.href = BASE + f; });
+                }).catch(function () {});
+            }
+        })();
+    </script>
+    <script>
         // Unified language policy (family standard): explicit choice wins;
         // otherwise follow the browser locale. Default copy is Chinese —
         // data-i18n keys below resolve against these dictionaries.
@@ -434,7 +468,9 @@
                 "hero.eyebrow": "键盘优先的启动器 · macOS · Windows · Linux",
                 "hero.h1a": "一次按键，", "hero.h1b": "直达一切。",
                 "hero.lead": "Fulcrum（支点）是 macOS、Windows 与 Linux 上的键盘优先启动器。按下全局热键，浮出命令面板：模糊搜索应用与文件、回溯剪贴板历史、展开片段、随手计算、发起网络搜索、运行插件——一切都在本机完成。",
-                "hero.cta-primary": "抢先体验", "hero.cta-docs": "阅读文档",
+                "hero.cta-primary": "下载 macOS 版", "hero.cta-docs": "阅读文档",
+                "hero.cta-mac": "下载 macOS 版", "hero.cta-win": "下载 Windows 版", "hero.cta-linux": "下载 Linux 版",
+                "hero.all-releases": "全部版本",
                 "launcher.row1-kind": "应用",
                 "launcher.row2-title": "fulcrum 更新日志", "launcher.row2-kind": "片段",
                 "launcher.row3-kind": "计算器",
@@ -492,7 +528,9 @@
                 "hero.eyebrow": "Keyboard-first launcher · macOS · Windows · Linux",
                 "hero.h1a": "One keystroke.", "hero.h1b": "Everything within reach.",
                 "hero.lead": "Fulcrum is a keyboard-first launcher for macOS, Windows and Linux. Press one global hotkey and a floating command palette appears: fuzzy-search apps and files, revisit your clipboard history, expand snippets, calculate, fire web-search bangs and run plugins — all on-device.",
-                "hero.cta-primary": "Get Early Access", "hero.cta-docs": "Read the Docs",
+                "hero.cta-primary": "Download for macOS", "hero.cta-docs": "Read the Docs",
+                "hero.cta-mac": "Download for macOS", "hero.cta-win": "Download for Windows", "hero.cta-linux": "Download for Linux",
+                "hero.all-releases": "All releases",
                 "launcher.row1-kind": "Application",
                 "launcher.row2-title": "fulcrum changelog", "launcher.row2-kind": "Snippet",
                 "launcher.row3-kind": "Calculator",
