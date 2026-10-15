@@ -2,7 +2,7 @@
 
 One keystroke. Everything within reach. A keyboard-first launcher for macOS, Windows, and Linux — one Racket brain, three first-party native UIs, no WebView anywhere.
 
-[![CI](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/Windows-WinUI_3-0078D4?logo=windows11&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-SwiftUI-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK4-F9A03C?logo=linux&logoColor=white) [![License](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE) ![Version](https://img.shields.io/badge/version-0.10.1-C15F3C)
+[![CI](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/fulcrum/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/Windows-WinUI_3-0078D4?logo=windows11&logoColor=white) ![macOS](https://img.shields.io/badge/macOS-SwiftUI-000000?logo=apple&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK4-F9A03C?logo=linux&logoColor=white) [![License](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE) ![Version](https://img.shields.io/badge/version-0.11.2-C15F3C)
 
 **English** · [中文](README.zh-CN.md)
 
@@ -59,7 +59,7 @@ fulcrum/
 └── .github/workflows/      # CI matrix + tag-driven release pipeline
 ```
 
-## Status: v0.10.1 (developer preview)
+## Status (developer preview)
 
 Developer preview. The backend is complete and tested (81 test cases over ranking, stores, plugins, AI, and the signed update pipeline) and ships an eleven-plugin first-party gallery (query `gallery` to install) plus a settings/snippets sync beta (`sync-root`). All three hosts track the backend contract: Windows (WinUI 3), macOS (SwiftUI), and Linux (GTK4) — the Linux host builds through the official `raco rivet build` Linux path introduced in [Rivet 0.3](https://github.com/turinglambdaai/rivet). Known platform edges are stated in the [user guide](docs/user-guide.md#troubleshooting) rather than papered over: file search is macOS-only, and the Linux host wants `wtype` for paste-to-frontmost on Wayland. `raco rivet doctor` / `dev` is the supported developer loop on every platform.
 
