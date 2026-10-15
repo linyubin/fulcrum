@@ -13,6 +13,8 @@
         (entry . "start")
         (protocol . 1)
         (resources . ("shared/i18n"))
+        (macos-icon . "assets/fulcrum.icns")
+        (windows-icon . "assets/fulcrum.ico")
         (linux-icon . "assets/fulcrum-icon-512.png")
         ;; Native Linux installers (deb installs /opt/fulcrum with a desktop
         ;; entry, rpm builds via rpmbuild, AppImage carries its own GTK4
