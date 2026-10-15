@@ -4,10 +4,11 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
-## [Unreleased]
+## [0.11.0] - 2026-10-14
 
 Foundation round — the launcher finally answers "what is this and where
-do I report it", on every host.
+do I report it", on every host, and the Windows and Linux hosts learn to
+speak the shared language.
 
 ### Added
 
@@ -21,18 +22,28 @@ do I report it", on every host.
   carries the version line, the site (fulcrum.jrtx.site), the issue
   tracker and "Business Source License 1.1" (macOS strings ride the
   shared/i18n single source — new `about*` keys, zh and en).
+- **The Windows and Linux hosts speak the shared i18n source.** Both
+  hardcoded the update/about surface in English; they now load the staged
+  `shared/i18n` res JSON (dependency-free line-based loader over an
+  embedded fallback table of the same keys) and follow the backend
+  `language` setting, applied on the next launch — a missing file
+  degrades to correct copy, never to key names.
 - **GitHub issue templates** (bug report + feature request) so feedback
   from the About links lands structured: the bug form asks for the
   platform pair, install shape and hotkey setup, and never for an AI key.
+- **Websearch commands are unit-tested**: bang routing, RFC 3986
+  percent-encoding of query metacharacters (a stray `&` or `=` is a
+  query injection into the browser URL), and the fallback contract.
 
 ### Fixed
 
 - **The backend's headless version fallback drifted**: the `must track
   rivet.rktd` literal in `app/backend.rkt` still said 0.10.0 after
   0.10.1 shipped, so every headless run (tests, dev loops) believed it
-  was outdated. It now reads 0.10.1, and `check-release-version.sh`
-  grew a fourth gate — VERSION == rivet.rktd == backend fallback == tag —
-  so the literal can never drift again.
+  was outdated. It now tracks the release (0.11.0 as of this release),
+  and `check-release-version.sh` grew a fourth gate — VERSION ==
+  rivet.rktd == backend fallback == tag — so the literal can never
+  drift again.
 
 ### Changed
 
@@ -40,6 +51,17 @@ do I report it", on every host.
   failed state, so the exact error can be copied into a bug report
   instead of retyped (Windows' status line already had its copy
   affordance; Linux' status label is selectable).
+- **One RIVET_PIN per workflow**: the five literal rivet pins in CI and
+  release collapse into `${{ env.RIVET_PIN }}`, so a rivet bump is one
+  edit per file, not a grep-replace.
+- **Versionless stable aliases ride every release**: the primary
+  installers are also uploaded as `fulcrum-macos-arm64.dmg` (etc.), so
+  `releases/latest/download/<alias>` stays a permanent URL and the site
+  hero CTA points straight at the right download with OS/arch detection.
+- **Dead code leaves**: `files.rkt`'s unused `search-command` and
+  `plugins.rkt`'s `remember-results!` are gone; the release runbook §2
+  now matches reality (the update verification key is committed source,
+  not swapped per release).
 
 ## [0.10.1] - 2026-10-14
 
