@@ -4,7 +4,7 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
-## [Unreleased]
+## [0.11.2] - 2026-10-15
 
 ### Added
 
