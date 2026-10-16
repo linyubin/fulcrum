@@ -68,6 +68,175 @@ ResultRow parse_row(std::vector<std::string> const& cells) {
   return row;
 }
 
+// ---- panel styling ----------------------------------------------------------
+//
+// One stylesheet drives the panel look — glass background, amber (#D97706)
+// rows, the ↵ chip on the selected row only — the same design tokens the
+// macOS host renders through vibrancy and the Windows host through Desktop
+// Acrylic. GNOME compositors do not blur, so the glass is an alpha
+// background: KWin and other blurring compositors upgrade it to frosted
+// glass for free, and a session without a compositor degrades to a solid
+// panel. Re-applied when the backend pushes the theme state, because the
+// dark variant picks its own glass tone.
+
+static GtkCssProvider* g_panel_css = nullptr;
+
+static void apply_panel_css() {
+  gboolean dark = FALSE;
+  if (GtkSettings* settings = gtk_settings_get_default()) {
+    g_object_get(settings, "gtk-application-prefer-dark-theme", &dark,
+                 nullptr);
+  }
+  char const* glass_css = dark
+      ? R"CSS(
+window.fulcrum-window {
+  background-color: rgba(28,28,30,0.88);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #f2f2f2;
+}
+)CSS"
+      : R"CSS(
+window.fulcrum-window {
+  background-color: rgba(250,250,249,0.92);
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.10);
+  color: #1d1d1f;
+}
+)CSS";
+  static char const* const shared_css = R"CSS(
+window.fulcrum-window entry {
+  background: none;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  font-size: 17px;
+  padding: 10px 4px;
+}
+window.fulcrum-window list {
+  padding: 2px 8px 8px;
+  background: none;
+}
+window.fulcrum-window list row {
+  border-radius: 8px;
+  margin: 1px 2px;
+  padding: 4px 8px;
+  background-color: transparent;
+}
+window.fulcrum-window list row:hover {
+  background-color: alpha(#D97706, 0.08);
+}
+window.fulcrum-window list row:selected {
+  background-color: alpha(#D97706, 0.16);
+}
+.fulcrum-row-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.fulcrum-row-subtitle {
+  font-size: 11px;
+}
+.fulcrum-row-icon {
+  background-color: alpha(#D97706, 0.14);
+  border-radius: 6px;
+  padding: 5px;
+  color: #D97706;
+}
+.fulcrum-badge {
+  background-color: alpha(#D97706, 0.16);
+  color: #D97706;
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.fulcrum-enter {
+  color: #D97706;
+  font-weight: 700;
+  opacity: 0;
+}
+list row:selected .fulcrum-enter {
+  opacity: 1;
+}
+)CSS";
+
+  GdkDisplay* display = gdk_display_get_default();
+  if (display == nullptr) {
+    return;
+  }
+  if (g_panel_css != nullptr) {
+    gtk_style_context_remove_provider_for_display(
+        display, GTK_STYLE_PROVIDER(g_panel_css));
+    g_object_unref(g_panel_css);
+    g_panel_css = nullptr;
+  }
+  g_panel_css = gtk_css_provider_new();
+  gtk_css_provider_load_from_string(g_panel_css,
+                                    (std::string(glass_css) + shared_css).c_str());
+  gtk_style_context_add_provider_for_display(
+      display, GTK_STYLE_PROVIDER(g_panel_css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+// Symbolic icon candidates per row kind, checked against the actual theme
+// so a bare system never paints the "missing icon" box.
+static char const* pick_icon(std::initializer_list<char const*> candidates) {
+  GtkIconTheme* theme =
+      gtk_icon_theme_get_for_display(gdk_display_get_default());
+  if (theme == nullptr) {
+    return nullptr;
+  }
+  for (char const* name : candidates) {
+    if (gtk_icon_theme_has_icon(theme, name)) {
+      return name;
+    }
+  }
+  return nullptr;
+}
+
+static char const* row_icon_name(ResultRow const& row) {
+  if (row.kind == "Calculator") {
+    return pick_icon({"accessories-calculator-symbolic"});
+  }
+  if (row.kind == "Clipboard") {
+    return pick_icon({"edit-paste-symbolic"});
+  }
+  if (row.kind == "Snippet") {
+    return pick_icon({"text-editor-symbolic"});
+  }
+  if (row.kind == "Quicklink") {
+    return pick_icon({"web-browser-symbolic", "link-symbolic"});
+  }
+  if (row.kind == "Web Search") {
+    return pick_icon({"web-browser-symbolic", "system-search-symbolic"});
+  }
+  if (row.kind == "Plugin") {
+    return pick_icon({"view-grid-symbolic", "system-run-symbolic"});
+  }
+  if (row.kind == "System") {
+    return row.id == "sys.lock"
+               ? pick_icon({"system-lock-screen-symbolic"})
+               : pick_icon({"preferences-system-symbolic",
+                            "emblem-system-symbolic"});
+  }
+  if (row.kind == "Setting") {
+    return pick_icon({"preferences-system-symbolic"});
+  }
+  if (row.kind == "Window") {
+    return pick_icon({"window-new-symbolic", "view-grid-symbolic"});
+  }
+  if (row.kind == "Update") {
+    return pick_icon({"document-save-symbolic", "go-down-symbolic"});
+  }
+  if (row.kind == "AI") {
+    return pick_icon({"starred-symbolic", "system-search-symbolic"});
+  }
+  if (row.kind == "File") {
+    return pick_icon({"folder-documents-symbolic"});
+  }
+  return pick_icon({"application-x-executable-symbolic"});
+}
+
 // Rivet's POSIX shutdown plumbing (defined after Launcher). Installed once
 // the embedded runtime has booted — see on_backend_ready for the ordering.
 void install_shutdown_hook_once();
@@ -716,6 +885,7 @@ struct Launcher {
 
   // The theme setting is backend-owned; GTK can only ask for the dark
   // variant explicitly — light/system fall back to the user's GTK theme.
+  // The panel stylesheet rides along: the dark glass is its own tone.
   static void apply_theme(std::string const& theme) {
     GtkSettings* settings = gtk_settings_get_default();
     if (settings == nullptr) {
@@ -723,6 +893,7 @@ struct Launcher {
     }
     g_object_set(settings, "gtk-application-prefer-dark-theme",
                  theme == "dark" ? TRUE : FALSE, nullptr);
+    apply_panel_css();
   }
 
   void apply_ai_stream(rivet_app::AiStream const& stream) {
@@ -1125,23 +1296,48 @@ struct Launcher {
       child = next;
     }
     for (auto const& row : rows) {
-      auto* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-      gtk_widget_set_margin_top(box, 6);
-      gtk_widget_set_margin_bottom(box, 6);
-      gtk_widget_set_margin_start(box, 10);
-      gtk_widget_set_margin_end(box, 10);
+      // Row grammar matches the macOS/Windows hosts: amber icon tile,
+      // title over muted subtitle, badge chip, and the ↵ chip that the
+      // stylesheet shows only on the selected row.
+      auto* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+      gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
+
+      if (char const* icon_name = row_icon_name(row)) {
+        auto* icon = gtk_image_new_from_icon_name(icon_name);
+        gtk_image_set_pixel_size(GTK_IMAGE(icon), 16);
+        gtk_widget_add_css_class(icon, "fulcrum-row-icon");
+        gtk_box_append(GTK_BOX(box), icon);
+      }
+
+      auto* texts = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+      gtk_widget_set_valign(texts, GTK_ALIGN_CENTER);
+      gtk_widget_set_hexpand(texts, TRUE);
       auto* title = gtk_label_new(row.title.c_str());
       gtk_label_set_xalign(GTK_LABEL(title), 0.0);
       gtk_label_set_ellipsize(GTK_LABEL(title), PANGO_ELLIPSIZE_END);
-      gtk_widget_add_css_class(title, "heading");
+      gtk_widget_add_css_class(title, "fulcrum-row-title");
       auto* subtitle = gtk_label_new(
           row.subtitle.empty() ? row.kind.c_str() : row.subtitle.c_str());
       gtk_label_set_xalign(GTK_LABEL(subtitle), 0.0);
       gtk_label_set_ellipsize(GTK_LABEL(subtitle), PANGO_ELLIPSIZE_END);
-      gtk_widget_add_css_class(subtitle, "caption");
+      gtk_widget_add_css_class(subtitle, "fulcrum-row-subtitle");
       gtk_widget_add_css_class(subtitle, "dim-label");
-      gtk_box_append(GTK_BOX(box), title);
-      gtk_box_append(GTK_BOX(box), subtitle);
+      gtk_box_append(GTK_BOX(texts), title);
+      gtk_box_append(GTK_BOX(texts), subtitle);
+      gtk_box_append(GTK_BOX(box), texts);
+
+      if (!row.badge.empty()) {
+        auto* badge = gtk_label_new(row.badge.c_str());
+        gtk_widget_add_css_class(badge, "fulcrum-badge");
+        gtk_widget_set_valign(badge, GTK_ALIGN_CENTER);
+        gtk_box_append(GTK_BOX(box), badge);
+      }
+
+      auto* enter = gtk_label_new("\u21B5");
+      gtk_widget_add_css_class(enter, "fulcrum-enter");
+      gtk_widget_set_valign(enter, GTK_ALIGN_CENTER);
+      gtk_box_append(GTK_BOX(box), enter);
+
       gtk_list_box_append(results, box);
     }
     if (!rows.empty()) {
@@ -1807,6 +2003,10 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_window_set_title(launcher.window, "Fulcrum");
   gtk_window_set_default_size(launcher.window, 680, 440);
   gtk_window_set_resizable(launcher.window, FALSE);
+  // Chromeless like the other hosts: the panel content IS the window, and
+  // the stylesheet rounds it. Close still hides (below) via Esc / the tray.
+  gtk_window_set_decorated(launcher.window, FALSE);
+  apply_panel_css();
   // The WM's close button HIDES, exactly like the other hosts: the
   // process stays resident (hotkey / --toggle / tray summon it back).
   // A close that quits would strand the user with no way to summon.
