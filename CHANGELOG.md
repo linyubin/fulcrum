@@ -6,6 +6,24 @@ independently per platform packaging run.
 
 ## [Unreleased]
 
+### Changed
+
+- **One glass panel across all three platforms.** The launcher now reads
+  as the same product everywhere, each host rendered with its own native
+  material: Desktop Acrylic on Windows (the window is chromeless — the
+  content is the panel), vibrancy on macOS, and an alpha-glass GTK
+  stylesheet on Linux (KWin and other blurring compositors frost it;
+  without a compositor it degrades to solid). All three share the row
+  grammar the macOS panel already had: amber icon tiles, title over a
+  muted subtitle, badge chips, an inset rounded selection in the product
+  accent (#D97706) instead of system blue/default, and the ↵ affordance
+  chip on the selected row only. Windows rows previously showed a bare
+  title string and a permanent InfoBar strip; routine status now lives
+  quietly in the footer and the InfoBar appears only for things that
+  need attention. Linux gains a styled search entry, pointer hover, and
+  symbolic icon tiles with theme-checked fallbacks (a bare system never
+  paints the missing-icon box).
+
 ### Fixed
 
 - **The macOS menu bar showed the app name instead of an icon.** The
