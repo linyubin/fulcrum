@@ -64,7 +64,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake pkg-config \
-            libgtk-4-dev zlib1g-dev liblz4-dev libncurses-dev libxtst-dev
+            libgtk-4-dev zlib1g-dev liblz4-dev libncurses-dev libxtst-dev xvfb
+      - name: X11 hotkey regression tests (private virtual display)
+        run: python3 tests/run-linux-hotkey-tests.py
       - name: raco rivet doctor
         shell: bash
         run: raco rivet doctor
