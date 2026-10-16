@@ -55,6 +55,7 @@
 (define make-snippets (get "app/core/snippets.rkt" 'make-snippet-store))
 (define make-engine (get "app/core/engine.rkt" 'make-engine))
 (define rebuild (get "app/core/engine.rkt" 'engine-rebuild-index!))
+(define app-count* (get "app/core/engine.rkt" 'engine-app-count))
 
 (define manager (make-settings-manager (settings-path)))
 (define eng (make-engine
@@ -194,17 +195,35 @@
         #t)
 
 ;; settings round trip already covered; exercise index-rebuild
-;; KNOWN ISSUE (pending): index-rebuild over the wire deadlocks inside the
-;; serve worker (direct in-process rebuild returns in ~90 ms with the same
-;; engine; over the transport the worker never finishes and no response
-;; ever arrives, so the whole call hangs even at a 200 s timeout). Needs a
-;; concurrency investigation (strace/gdb on the worker + writer threads)
-;; before it can run here; the failure path itself is covered by the
-;; handler's exn? guard added in the same change.
-#;(define-values (irv ire _irev)
-  (call-rpc 17 (list "index-rebuild") #:timeout-secs 240))
-#;(check! "index-rebuild no error" ire #f)
-#;(check! "index-rebuild returns a count" (exact-integer? irv) #t)
+;; (This call used to hang inside the serve worker on an older rivet and
+;; lived commented out as a KNOWN ISSUE; with current rivet the worker
+;; answers over the same pipe transport in ~200 ms, so it is wired back in.
+;; The handler's exn? guard keeps a discovery failure a -1 result either way.)
+(define-values (irv ire _irev) (call-rpc 17 (list "index-rebuild")))
+(check! "index-rebuild no error" ire #f)
+(check! "index-rebuild returns the index size"
+        irv (app-count* (current-engine)))
+
+;; app index freshness: the search path rebuilds when the discovery roots
+;; changed since the cached fingerprint (installs during a session used to
+;; stay invisible until relaunch). Drive the refresh directly and watch the
+;; cache stamp; the search RPCs above already ran it once with cache #f.
+(define refresh* (get "app/backend.rkt" 'refresh-app-index-if-stale!))
+(define fingerprint* (get "app/core/apps.rkt" 'application-roots-fingerprint))
+(define cache* (get "app/backend.rkt" 'app-roots-fingerprint-cache))
+(cache* #f)
+(refresh*)
+(check! "refresh with no cache rebuilds and stamps the fingerprint"
+        (equal? (cache*) (fingerprint*)) #t)
+(define count-after-refresh (app-count* (current-engine)))
+(refresh*)
+(check! "refresh with unchanged roots is a no-op" (cache*) (fingerprint*))
+(check! "no-op refresh keeps the engine index"
+        (app-count* (current-engine)) count-after-refresh)
+(cache* (list (list "/definitely/not/a/root" #f)))
+(refresh*)
+(check! "stale cache triggers a rebuild"
+        (equal? (cache*) (fingerprint*)) #t)
 
 ;; plugins-reload is void and harmless with an empty gallery
 (define-values (prv pre _prev) (call-rpc 18 (list "plugins-reload")))

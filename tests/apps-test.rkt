@@ -161,3 +161,31 @@
      (check-true (and (member "setup" names) #t) "subdirs are traversed")
      (check-false (member "notes" names) "non-shortcut files excluded")
      (check-false (member "Tools" names) "directories excluded"))))
+
+(test-case "roots fingerprint tracks installs without a watcher"
+  (define dir (make-temporary-file "fulcrum-fingerprint-~a" 'directory))
+  (dynamic-wind
+    void
+    (lambda ()
+      ;; mtime granularity is whole seconds: stamp an old mtime first so a
+      ;; bundle created afterwards cannot land in the baseline second.
+      (file-or-directory-modify-seconds
+       dir (- (file-or-directory-modify-seconds dir) 10))
+      (define baseline (application-roots-fingerprint (list dir)))
+      (check-equal? (length baseline) 1)
+      (check-equal? (list-ref (car baseline) 0) (path->string dir))
+      (check-equal? (application-roots-fingerprint (list dir)) baseline
+                    "stable while nothing changes")
+      (check-false (apps-index-stale? baseline (list dir)))
+      (check-true (apps-index-stale? #f (list dir)) "no cache is stale")
+      (make-directory* (build-path dir "Newly.app" "Contents"))
+      (define after-install (application-roots-fingerprint (list dir)))
+      (check-false (equal? after-install baseline)
+                   "an added bundle changes the fingerprint")
+      (check-true (apps-index-stale? baseline (list dir)))
+      (check-false (apps-index-stale? after-install (list dir)))
+      ;; A root that vanished mid-check marks its entry #f instead of raising.
+      (check-equal?
+       (application-roots-fingerprint (list (build-path dir "gone")))
+       (list (list (path->string (build-path dir "gone")) #f))))
+    (lambda () (delete-directory/files dir))))

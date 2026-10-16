@@ -4,6 +4,31 @@ All notable changes to Fulcrum are documented here. Versions follow
 [SemVer](https://semver.org/); the `build` number in `rivet.rktd` increments
 independently per platform packaging run.
 
+## [Unreleased]
+
+### Fixed
+
+- **The macOS menu bar showed the app name instead of an icon.** The
+  status item was installed with a text title, so it read as yet another
+  menu instead of a status item. It now carries the brand mark — the
+  lever balanced on a wedge over a ground bar — drawn in code as a
+  template image so it follows the menu bar's light/dark appearance,
+  the same approach as movebit's droplet (SwiftPM resource bundles
+  cannot ship inside a signed rivet app bundle).
+
+- **Applications installed after startup never appeared.** The app
+  index was a startup snapshot, so a bundle installed later stayed
+  invisible until relaunch (the `index-rebuild` RPC existed but nothing
+  ever called it). Every search now stats the discovery roots — a
+  handful of stat calls, microseconds per keystroke; an installed or
+  removed bundle changes a root's mtime and only then does the index
+  rebuild inline. Unchanged roots cost the search path nothing. The
+  refresh and the explicit rebuild share one fingerprint cache, and the
+  `index-rebuild` wire test, parked since an older rivet hung inside
+  the serve worker, is wired back in — that hang is gone (fixed by
+  rivet's keep-dispatch-live work, verified against both main and the
+  v0.11.0 pin).
+
 ## [0.12.0] - 2026-10-16
 
 ### Added

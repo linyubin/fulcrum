@@ -28,7 +28,10 @@
 
 (provide (struct-out application)
          applications-from-dirs
+         discovery-roots
          discover-applications
+         application-roots-fingerprint
+         apps-index-stale?
          parse-desktop-entry
          application-launch)
 
@@ -220,14 +223,34 @@
     [(windows) (windows-apps-from-dirs dirs)]
     [else (linux-apps-from-dirs dirs)]))
 
+(define (discovery-roots)
+  (case (system-type 'os)
+    [(macosx) (macos-app-roots)]
+    [(windows) (windows-app-roots)]
+    [else (filter directory-exists? (linux-app-roots))]))
+
 (define/contract (discover-applications)
   (-> (listof application?))
-  (define roots
-    (case (system-type 'os)
-      [(macosx) (macos-app-roots)]
-      [(windows) (windows-app-roots)]
-      [else (filter directory-exists? (linux-app-roots))]))
-  (applications-from-dirs roots))
+  (applications-from-dirs (discovery-roots)))
+
+;; Install detection without a filesystem watcher: a bundle added to or
+;; removed from a discovery root changes that directory's mtime, so stat-ing
+;; the handful of roots is enough to notice installs between searches. Each
+;; entry is (path-string seconds|#f); #f marks a root that vanished mid-check.
+;; An app updated in place inside an existing bundle keeps the root mtime —
+;; that case is out of scope, installs are the reported gap.
+(define/contract (application-roots-fingerprint [dirs (discovery-roots)])
+  (->* () ((listof path?)) (listof (list/c string? (or/c integer? #f))))
+  (for/list ([dir (in-list dirs)])
+    (define path (path->string dir))
+    (with-handlers ([exn:fail? (lambda (_) (list path #f))])
+      (list path (file-or-directory-modify-seconds path)))))
+
+(define/contract (apps-index-stale? cached-fingerprint [dirs (discovery-roots)])
+  (->* ((or/c (listof (list/c string? (or/c integer? #f))) #f))
+       ((listof path?)) boolean?)
+  (not (equal? cached-fingerprint
+               (application-roots-fingerprint dirs))))
 
 ;; ---- launching ----------------------------------------------------------
 

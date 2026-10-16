@@ -20,6 +20,51 @@ struct FulcrumApp: App {
     }
 }
 
+/// The fulcrum brand mark — a lever with a knob, balanced on a wedge over
+/// a ground bar — drawn as a template image (pure black + alpha) so it
+/// follows the menu bar's light/dark appearance. Drawn in code for the
+/// same reason movebit's droplet is: SwiftPM resource bundles cannot ship
+/// inside a signed rivet app bundle.
+private enum MenuBarIcon {
+    static var fulcrum: NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
+            NSColor.black.setFill()
+            NSColor.black.setStroke()
+
+            // Ground bar
+            let ground = NSBezierPath()
+            ground.lineWidth = 1.6
+            ground.lineCapStyle = .round
+            ground.move(to: NSPoint(x: 3.2, y: 2.2))
+            ground.line(to: NSPoint(x: 14.8, y: 2.2))
+            ground.stroke()
+
+            // The wedge: the fulcrum itself
+            let wedge = NSBezierPath()
+            wedge.move(to: NSPoint(x: 5.4, y: 3.0))
+            wedge.line(to: NSPoint(x: 12.6, y: 3.0))
+            wedge.line(to: NSPoint(x: 9.0, y: 9.5))
+            wedge.close()
+            wedge.fill()
+
+            // The lever rests on the wedge apex; the knob marks the raised end
+            let lever = NSBezierPath()
+            lever.lineWidth = 1.5
+            lever.lineCapStyle = .round
+            lever.move(to: NSPoint(x: 3.2, y: 7.0))
+            lever.line(to: NSPoint(x: 15.0, y: 12.8))
+            lever.stroke()
+
+            let knob = NSBezierPath(ovalIn: NSRect(x: 13.3, y: 11.1, width: 3.4, height: 3.4))
+            knob.fill()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Fulcrum"
+        return image
+    }
+}
+
 /// Owns the floating panel, the global hotkey, and the clipboard watcher.
 /// The SwiftUI scene graph stays inside the panel's content view.
 /// AppKit delegates run on the main thread; Swift 6 concurrency makes that
@@ -379,26 +424,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: menu bar
 
-    /// First-party rivet menu bar: Open runs the same toggle as the
-    /// hotkey; Check for Updates opens the update panel; Quit is the only
-    /// way out of the resident process.
+    /// First-party rivet menu bar: the brand glyph as a template icon (a
+    /// text title reads as another menu, an icon reads as a status item);
+    /// Open runs the same toggle as the hotkey; Check for Updates opens
+    /// the update panel; Quit is the only way out of the resident process.
     private func installMenuBar(model: LauncherModel) {
         let controller = RivetMenuBarController()
         controller.install(
-            title: "Fulcrum",
-            menuItems: [
-                ("Open Fulcrum", "open", { [weak self] in
+            icon: MenuBarIcon.fulcrum,
+            items: [
+                .action(label: "Open Fulcrum", identifier: "open", handler: { [weak self] in
                     self?.showPanel()
                 }),
-                ("Check for Updates…", "update", { [weak self] in
+                .action(label: "Check for Updates…", identifier: "update", handler: { [weak self] in
                     guard let self else { return }
                     self.updateController?.checkForUpdates()
                     self.showUpdatePanel()
                 }),
-                ("About Fulcrum", "about", { [weak self] in
+                .action(label: "About Fulcrum", identifier: "about", handler: { [weak self] in
                     self?.showAboutPanel()
                 }),
-                ("Quit Fulcrum", "quit", {
+                .action(label: "Quit Fulcrum", identifier: "quit", handler: {
                     NSApp.terminate(nil)
                 })
             ])

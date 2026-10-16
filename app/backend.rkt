@@ -56,6 +56,9 @@
          plugin-pref-current-value
          plugin-pref-spec
          plugin-set-rows
+         app-roots-fingerprint-cache
+         refresh-app-index-if-stale!
+         rebuild-app-index!
          run-action)
 
 ;; Staged and packaged apps carry the true version in rivet-app-info.rktd
@@ -1131,7 +1134,31 @@
 (define-rpc (health : String)
   (format "fulcrum ~a apps=~a" app-version (engine-app-count (engine!))))
 
+;; ---- app index freshness -------------------------------------------------
+;;
+;; The app index is a startup snapshot; an application installed after
+;; startup stayed invisible until relaunch. Every search stats the
+;; discovery roots (a handful of stat calls, microseconds per keystroke):
+;; an installed or removed bundle changes a root's mtime and only then does
+;; the index rebuild inline. Unchanged roots cost the search path nothing.
+;; The fingerprint cache is a parameter so tests can drive the refresh.
+
+(define app-roots-fingerprint-cache (make-parameter #f))
+
+;; Shared by the search RPC (staleness-gated) and index-rebuild (explicit);
+;; returns the new index size. Discovery failures propagate to the caller's
+;; guard so a platform-specific error degrades, never kills the worker.
+(define (rebuild-app-index!)
+  (define count (engine-rebuild-index! (engine!)))
+  (app-roots-fingerprint-cache (application-roots-fingerprint))
+  count)
+
+(define (refresh-app-index-if-stale!)
+  (when (apps-index-stale? (app-roots-fingerprint-cache))
+    (rebuild-app-index!)))
+
 (define-rpc (search [query String] : (List (List String)))
+  (refresh-app-index-if-stale!)
   (rows-for (engine!) query))
 
 ;; Secondary actions for one result row — the ⌘K panel's contents, in the
@@ -1183,7 +1210,7 @@
                    (lambda (e)
                      (notify (format "index rebuild failed: ~a" (exn-message e)))
                      -1)])
-    (engine-rebuild-index! (engine!))))
+    (rebuild-app-index!)))
 
 ;; ---- clipboard ----------------------------------------------------------
 
@@ -1569,6 +1596,9 @@
                  #:plugin-manager plug-mgr
                  #:max-results (settings-get manager 'max-results)))
   (engine-rebuild-index! engine)
+  ;; The startup rebuild IS the fresh state; stamping the cache here keeps
+  ;; the first search from re-scanning the roots redundantly.
+  (app-roots-fingerprint-cache (application-roots-fingerprint))
   (current-settings manager)
   (current-engine engine)
   ;; The updater persists its throttle and rollout bucket in the settings
