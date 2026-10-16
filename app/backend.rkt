@@ -1146,12 +1146,15 @@
 (define app-roots-fingerprint-cache (make-parameter #f))
 
 ;; Shared by the search RPC (staleness-gated) and index-rebuild (explicit);
-;; returns the new index size. Discovery failures propagate to the caller's
+;; returns the rebuilt index's key count. That is not the discovery list's
+;; length on every platform: overlapping roots can hand back several bundles
+;; under one resolved path, and the index is keyed by id, so the count is
+;; read off the index itself. Discovery failures propagate to the caller's
 ;; guard so a platform-specific error degrades, never kills the worker.
 (define (rebuild-app-index!)
-  (define count (engine-rebuild-index! (engine!)))
+  (engine-rebuild-index! (engine!))
   (app-roots-fingerprint-cache (application-roots-fingerprint))
-  count)
+  (engine-app-count (engine!)))
 
 (define (refresh-app-index-if-stale!)
   (when (apps-index-stale? (app-roots-fingerprint-cache))
