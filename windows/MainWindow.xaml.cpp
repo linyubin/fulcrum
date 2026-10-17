@@ -857,6 +857,24 @@ void MainWindow::FinishNativeSetup() {
                       if (msg == kExpansionRepairMessage && self != nullptr) {
                         self->RepairExpansion(static_cast<std::size_t>(wParam));
                       }
+                      if (msg == WM_NCHITTEST && self != nullptr) {
+                        // The borderless panel has no titlebar to drag by,
+                        // and the macOS panel stays movable through its
+                        // transparent titlebar region — keep the Windows
+                        // one movable the same way: the padding strip above
+                        // the query box (16 DIP, QueryBox's top margin) is
+                        // the caption. Everything else stays HTCLIENT so
+                        // rows and the query box keep their clicks.
+                        POINT point{
+                            static_cast<LONG>(static_cast<short>(LOWORD(lParam))),
+                            static_cast<LONG>(static_cast<short>(HIWORD(lParam)))};
+                        if (::ScreenToClient(hWnd, &point) &&
+                            point.y >= 0 &&
+                            point.y < static_cast<LONG>(
+                                          16 * ::GetDpiForWindow(hWnd) / 96)) {
+                          return HTCAPTION;
+                        }
+                      }
                       return DefSubclassProc(hWnd, msg, wParam, lParam);
                     },
                     1,

@@ -38,6 +38,14 @@ independently per platform packaging run.
 
 ### Fixed
 
+- **The borderless panel could not be dragged.** Removing the titlebar
+  (the caption X fix) also removed the only drag region, so the panel
+  was nailed where it first appeared. The hit-test now answers
+  `HTCAPTION` for the padding strip above the query box — the same deal
+  as the macOS panel's transparent titlebar region — so the panel is
+  movable by its top edge while rows and the query box keep their
+  clicks.
+
 - **The summoned panel did not accept typing until clicked.** Focusing
   the query box synchronously with `Activate()` races the activation —
   the focus lands on a window that is not foreground yet and is dropped
