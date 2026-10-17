@@ -38,6 +38,15 @@ independently per platform packaging run.
 
 ### Fixed
 
+- **The Windows exe shipped with no icon and no file identity.** Rivet's
+  build generates an icon + VERSIONINFO resource script and points
+  `RIVET_WINDOWS_ICON_RC` at it, but the host project never compiled it —
+  the ResourceCompile group exists in Rivet's scaffold template only, and
+  this repo owns its own `RivetHost.vcxproj`. Every tray icon, taskbar
+  button and Explorer listing fell back to the generic application icon.
+  The group is in, and the exe now carries the Fulcrum icon (resource ID
+  1, where `LoadIconW(MAKEINTRESOURCEW(1))` looks) and its version block.
+
 - **The updater compiled only against the pinned Rivet.** `app/update.rkt`
   carried its own `platform-symbol`/`architecture-symbol` copies; when
   Rivet #258 centralized those helpers into `rivet/distribution`, any
