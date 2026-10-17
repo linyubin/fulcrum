@@ -39,6 +39,7 @@
 
 #include "GeneratedBackend.hpp"
 #include "system_services.hpp"
+#include "x11_hotkey.hpp"
 
 namespace {
 
@@ -253,12 +254,7 @@ std::filesystem::path executable_path() {
   return std::filesystem::read_symlink("/proc/self/exe");
 }
 
-struct HotkeyGrab {
-  Display* display{nullptr};
-  Window window{None};
-};
-
-HotkeyGrab hotkey_grab;
+fulcrum::X11Hotkey g_x11_hotkey;
 
 // Portal-side global shortcuts (rivet GlobalShortcuts adapter). Held for
 // the process lifetime: the object owns the portal session and its async
@@ -273,9 +269,6 @@ struct HotkeySpec {
   unsigned int mods{Mod1Mask};
   KeySym keysym{XK_space};
 };
-
-HotkeySpec current_hotkey;
-KeyCode current_hotkey_code{0};
 
 bool parse_hotkey(std::string const& spec, HotkeySpec& out) {
   unsigned int mods = 0;
@@ -352,33 +345,11 @@ bool parse_hotkey(std::string const& spec, HotkeySpec& out) {
 // ("" on success). A spec that does not parse is ignored quietly: the
 // previous binding stays and the hotkey never becomes unreachable.
 std::string apply_x11_hotkey(std::string const& spec) {
-  Display* dpy = hotkey_grab.display;
-  if (dpy == nullptr || hotkey_grab.window == None) {
-    return "";
-  }
   HotkeySpec parsed;
   if (!parse_hotkey(spec, parsed)) {
     return "";
   }
-  if (current_hotkey_code != 0) {
-    XUngrabKey(dpy, current_hotkey_code, current_hotkey.mods,
-               hotkey_grab.window);
-    XUngrabKey(dpy, current_hotkey_code, current_hotkey.mods | Mod2Mask,
-               hotkey_grab.window);
-    current_hotkey_code = 0;
-  }
-  KeyCode code = XKeysymToKeycode(dpy, parsed.keysym);
-  if (code == 0) {
-    return "X11 hotkey setup failed: cannot resolve the key keycode.";
-  }
-  XGrabKey(dpy, code, parsed.mods, hotkey_grab.window, True, GrabModeAsync,
-           GrabModeAsync);
-  XGrabKey(dpy, code, parsed.mods | Mod2Mask, hotkey_grab.window, True,
-           GrabModeAsync, GrabModeAsync);  // with NumLock
-  current_hotkey = parsed;
-  current_hotkey_code = code;
-  XSelectInput(dpy, hotkey_grab.window, KeyPressMask);
-  return "";
+  return g_x11_hotkey.bind(parsed.keysym, parsed.mods);
 }
 
 // ---- native window management (win.* actions) -----------------------------
@@ -2134,37 +2105,18 @@ void show_settings_window() {
 
 // ---- X11 global hotkey ----------------------------------------------------
 
-gboolean on_x11_hotkey(GIOChannel*, GIOCondition, gpointer) {
-  Launcher::instance().toggle();
-  // Drain pending X events for the connection.
-  while (XPending(hotkey_grab.display) > 0) {
-    XEvent event;
-    XNextEvent(hotkey_grab.display, &event);
-  }
-  return G_SOURCE_CONTINUE;
-}
-
-std::string install_x11_hotkey(GdkDisplay* display, GtkWindow* window) {
+std::string install_x11_hotkey(GdkDisplay* display) {
   if (GDK_IS_X11_DISPLAY(display) == 0) {
     return "Wayland session: compositors do not allow global key grabs. "
            "Bind `fulcrum --toggle` to a key in your compositor settings.";
   }
-  hotkey_grab.display = gdk_x11_display_get_xdisplay(GDK_X11_DISPLAY(display));
-  hotkey_grab.window =
-      gdk_x11_surface_get_xid(gtk_native_get_surface(GTK_NATIVE(window)));
-
-  // Bootstrap grab so the launcher is reachable before the backend
-  // answers; the stored hotkey spec re-binds once the state arrives.
-  std::string note = apply_x11_hotkey("alt+space");
-  if (!note.empty()) {
-    return note;
-  }
-
-  int x11_fd = ConnectionNumber(hotkey_grab.display);
-  GIOChannel* channel = g_io_channel_unix_new(x11_fd);
-  g_io_add_watch(channel, G_IO_IN, on_x11_hotkey, nullptr);
-  g_io_channel_unref(channel);
-  return "";
+  std::string note = g_x11_hotkey.start(gdk_display_get_name(display), [] {
+    Launcher::instance().toggle();
+  });
+  if (!note.empty()) return note;
+  // Use the root on a dedicated connection so the grab works even when
+  // the launcher is hidden, without changing GDK's event mask or queue.
+  return apply_x11_hotkey("alt+space");
 }
 
 // ---- single instance via the first-party rivet lease ----------------------
@@ -2680,8 +2632,7 @@ void on_activate(GtkApplication* app, gpointer) {
         });
     launcher.start_backend();
   } else {
-    std::string hotkey_note = install_x11_hotkey(
-        gtk_widget_get_display(window), launcher.window);
+    std::string hotkey_note = install_x11_hotkey(gtk_widget_get_display(window));
     if (!hotkey_note.empty()) {
       launcher.set_status(hotkey_note);
     }
@@ -2699,6 +2650,7 @@ void on_activate(GtkApplication* app, gpointer) {
 }
 
 void on_shutdown(GApplication*, gpointer) {
+  g_x11_hotkey.stop();
   Launcher::instance().stop_backend();
 }
 

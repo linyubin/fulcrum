@@ -45,3 +45,22 @@ libncurses-dev`, plus an embeddable Racket CS 9.3 build (`libracketcs.a`;
 the official recipe builds one from the `racket-minimal` source tarball —
 see Rivet's `roundtrip.yml` for the exact steps, and this repository's CI
 for a cached version of the same flow).
+
+## Hotkey regression tests
+
+Run `rtk proxy python3 tests/run-linux-hotkey-tests.py` from the repository
+root. Requires a C++20 compiler, `pkg-config`, GLib/X11 development headers,
+`libXtst.so.6`, and `xvfb`. Set `XVFB=/path/to/Xvfb` to use a locally extracted
+binary without installing it system-wide.
+
+The runner creates a private, authenticated virtual display with TCP disabled;
+it never uses the desktop's `DISPLAY`. Tests have a 15-second timeout, CPU and
+memory limits, and clean up the server on exit. They exercise the actual X11
+listener with ordinary window events, injected key chords, lock keys,
+autorepeat, conflicting grabs, rebinding, and shutdown. They do not start the
+launcher, access its backend or clipboard, or validate a complete native app.
+
+The X11 fallback owns a separate connection and grabs the root window so it
+works while the launcher is hidden. Do not attach a second event reader to
+GDK's connection: unrelated UI events must never toggle the launcher or be
+removed from GDK's queue.
