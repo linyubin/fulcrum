@@ -5,18 +5,23 @@ import RivetEmbedding
 import RivetRuntime
 import RivetSystem
 
+// Launcher with no SwiftUI scenes: the panel, the About and the update
+// windows are AppKit windows owned by the delegate. A Settings scene used to
+// carry the About panel, but on current macOS every SwiftUI window scene
+// presents its window at launch — users saw a stray "Fulcrum Settings"
+// window behind the launcher on every start. Accessory activation: no Dock
+// icon; the menu bar glyph and the hotkey are the ways in, the launcher
+// convention.
 @main
-struct FulcrumApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var model = LauncherModel()
-
-    var body: some Scene {
-        Settings {
-            // The Settings scene is the About panel: version, website,
-            // feedback and license — the launcher has no other chrome to
-            // hang an About menu on.
-            AboutPanelView()
-        }
+enum FulcrumApp {
+    @MainActor
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        AppDelegate.shared = delegate  // NSApplication.delegate is not retained
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.run()
     }
 }
 
@@ -115,12 +120,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyHotkey("alt+space")
         installKeyMonitor()
         installMenuBar(model: launcherModel)
+        installMenus()
         installClipboardWatcher(model: launcherModel)
         launcherModel.start()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
+    }
+
+    /// Opening the app while it is already running (Finder, Spotlight,
+    /// `open -a Fulcrum`) summons the panel — the launcher convention, and
+    /// the way in for someone who has forgotten both the hotkey and the
+    /// menu bar glyph. There is no Dock icon to click.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        showPanel()
+        return false
+    }
+
+    // MARK: main menu
+
+    /// Pure AppKit bootstrap means no default menus. This restores the
+    /// keyboard plumbing the SwiftUI scene layer used to provide for free:
+    /// ⌘Q, the Edit six for the query field (⌘V paste, ⌘A select all) and
+    /// the selectable status text, ⌘W/⌘M on the About and update windows.
+    /// Accessory app: the menus show only while one of its windows is key.
+    private func installMenus() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "About Fulcrum",
+                        action: #selector(showAboutFromMenu(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(withTitle: "Check for Updates…",
+                        action: #selector(checkForUpdatesFromMenu(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Fulcrum",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo",
+                         action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo",
+                         action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut",
+                         action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy",
+                         action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste",
+                         action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All",
+                         action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        let windowItem = NSMenuItem()
+        mainMenu.addItem(windowItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Close",
+                           action: #selector(NSWindow.performClose(_:)),
+                           keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize",
+                           action: #selector(NSWindow.performMiniaturize(_:)),
+                           keyEquivalent: "m")
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func showAboutFromMenu(_ sender: Any?) {
+        showAboutPanel()
+    }
+
+    @objc private func checkForUpdatesFromMenu(_ sender: Any?) {
+        updateController?.checkForUpdates()
+        showUpdatePanel()
     }
 
     // MARK: backend readiness
@@ -427,7 +509,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// First-party rivet menu bar: the brand glyph as a template icon (a
     /// text title reads as another menu, an icon reads as a status item);
     /// Open runs the same toggle as the hotkey; Check for Updates opens
-    /// the update panel; Quit is the only way out of the resident process.
+    /// the update panel; Quit here (or ⌘Q while a window is key) is the
+    /// way out of the resident process — there is no Dock icon.
     private func installMenuBar(model: LauncherModel) {
         let controller = RivetMenuBarController()
         controller.install(

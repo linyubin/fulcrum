@@ -8,6 +8,16 @@ independently per platform packaging run.
 
 ### Changed
 
+- **macOS: Fulcrum is now a menu bar app — no Dock icon.** The launcher
+  convention (Spotlight, Raycast, Alfred): the menu bar glyph and the
+  hotkey are the ways in, and opening the app again from Finder,
+  Spotlight or `open -a Fulcrum` while it runs summons the panel instead
+  of doing nothing. Hiding the panel hands focus straight back to the app
+  you came from. The SwiftUI scene layer is gone with it; the app menu
+  (About, Check for Updates, ⌘Q), the Edit menu (⌘V paste into the query
+  field, ⌘A, ⌘C) and the Window menu (⌘W/⌘M on the About and update
+  windows) are hand-built so the keyboard plumbing stays intact.
+
 - **One glass panel across all three platforms.** The launcher now reads
   as the same product everywhere, each host rendered with its own native
   material: Desktop Acrylic on Windows (the window is chromeless — the
@@ -25,6 +35,18 @@ independently per platform packaging run.
   paints the missing-icon box).
 
 ### Fixed
+
+- **macOS: a stray "Fulcrum Settings" window appeared on every launch.**
+  The About panel rode a SwiftUI Settings scene, and on current macOS
+  every SwiftUI window scene presents its window at launch — so an About
+  panel sat behind the launcher from the first start. The scene is gone;
+  About opens on demand from the menu bar, the app menu and the `about`
+  row, in its own window.
+
+- **macOS: the About panel could show the wrong version.** It read the
+  bundle's Info.plist, packaging metadata that drifts on a hand-assembled
+  bundle; it now shows the version compiled into the binary — the same
+  number the backend reports and the updater compares against.
 
 - **The macOS menu bar showed the app name instead of an icon.** The
   status item was installed with a text title, so it read as yet another
