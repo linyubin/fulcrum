@@ -533,7 +533,11 @@ I18nEntry const kI18nFallback[] = {
     {"aboutReportIssue", "问题反馈", "Report an Issue"},
     {"trayOpen", "打开 Fulcrum", "Open Fulcrum"},
     {"traySettings", "设置…", "Settings…"},
+    {"trayCheckUpdates", "检查更新…", "Check for Updates…"},
+    {"trayAbout", "关于 Fulcrum", "About Fulcrum"},
     {"trayQuit", "退出 Fulcrum", "Quit Fulcrum"},
+    {"updateUpToDate", "已是最新版本", "Fulcrum is up to date"},
+    {"updateCheckFailed", "检查更新失败：{0}", "Update check failed: {0}"},
     {"trayFixHotkey", "修复 Alt+Space 冲突", "Fix Alt+Space conflict"},
     {"hotkeyShadowed",
      "唤出热键 {0} 被 GNOME 的窗口菜单占用 — 托盘菜单中的「修复 Alt+Space」可解除",
@@ -2198,12 +2202,50 @@ void tray_fix_hotkey() {
   }
 }
 
+// Manual update check from the tray: manual=true bypasses the 4-hour
+// family throttle (the backend stamps the timestamp either way). The
+// result lands in the launcher status line; the `update` query rows drive
+// download and install from there.
+void tray_check_updates() {
+  auto* api_raw = Launcher::instance().api.get();
+  if (api_raw == nullptr) {
+    Launcher::post_status("Update check once the backend is ready…");
+    return;
+  }
+  std::thread([api_raw]() {
+    std::string line;
+    try {
+      auto const check = api_raw->update_check(true).get();
+      if (check.status == "available") {
+        line = tr_format("updateAvailableStatus",
+                         {check.available_version.value_or("?")});
+      } else if (check.status == "up-to-date") {
+        line = tr("updateUpToDate");
+      } else {
+        line = tr_format("updateCheckFailed",
+                         {check.error.value_or("check failed")});
+      }
+    } catch (std::exception const& e) {
+      line = tr_format("updateCheckFailed", {e.what()});
+    } catch (...) {
+      line = tr("updateCheckFailed") + ": unknown error";
+    }
+    Launcher::post_status(std::move(line));
+  }).detach();
+}
+
 std::vector<rivet::system::TrayMenuItem> tray_menu_items() {
   std::vector<rivet::system::TrayMenuItem> items;
   items.push_back(rivet::system::TrayMenuItem(
       tr("trayOpen"), [] { Launcher::instance().show(); }));
   items.push_back(rivet::system::TrayMenuItem(
       tr("traySettings"), [] { show_settings_window(); }));
+  // Check for Updates and About always travel together (the family rule).
+  items.push_back(rivet::system::TrayMenuItem(
+      tr("trayCheckUpdates"), [] { tray_check_updates(); }));
+  items.push_back(rivet::system::TrayMenuItem(
+      tr("trayAbout"),
+      [] { show_about_dialog(Launcher::instance().window); }));
   if (Launcher::instance().hotkey_shadowed) {
     items.push_back(rivet::system::TrayMenuItem(
         tr("trayFixHotkey"), [] { tray_fix_hotkey(); }));

@@ -123,6 +123,8 @@ struct MainWindow : MainWindowT<MainWindow> {
   // "update" launcher rows drive check/download/reveal on this state.
   void StartSilentUpdateCheck();
   void StartUpdateProgressPoll();
+  // Tray "Check for Updates…": manual check, result in the footer.
+  void CheckForUpdates();
   // About panel (tray menu + the `about` launcher row): one ContentDialog
   // with version, tagline, license and the site/issue links.
   winrt::fire_and_forget ShowAbout();

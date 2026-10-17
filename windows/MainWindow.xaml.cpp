@@ -25,6 +25,7 @@ constexpr int kTrayMenuOpen = 1;
 constexpr int kTrayMenuAbout = 2;
 constexpr int kTrayMenuQuit = 3;
 constexpr int kTrayMenuSettings = 4;
+constexpr int kTrayMenuUpdates = 5;
 
 constexpr int kHotkeyIdPrimary = 0xF11C;  // Alt+Space
 constexpr int kHotkeyIdFallback = 0xF11D; // Ctrl+Alt+Space
@@ -385,6 +386,7 @@ constexpr I18nEntry kI18nFallback[] = {
     {"updateDownloadFailed", "更新下载失败：{0}",
      "Update download failed: {0}"},
     {"updateUnknownError", "未知错误", "unknown error"},
+    {"updateUpToDate", "已是最新版本", "Fulcrum is up to date"},
     {"updateDownloadPercent", "正在下载更新… {0}%",
      "Downloading update… {0}%"},
     {"updateClose", "关闭", "Close"},
@@ -893,6 +895,7 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
       if (menu != nullptr) {
         ::AppendMenuW(menu, MF_STRING, kTrayMenuOpen, L"Open Fulcrum");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuSettings, L"Settings…");
+        ::AppendMenuW(menu, MF_STRING, kTrayMenuUpdates, L"Check for Updates…");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuAbout, L"About Fulcrum");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuQuit, L"Quit Fulcrum");
         ::SetForegroundWindow(hwnd);  // so outside clicks dismiss the menu
@@ -903,6 +906,8 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
           ShowLauncher();
         } else if (choice == kTrayMenuSettings) {
           ShowSettings();
+        } else if (choice == kTrayMenuUpdates) {
+          CheckForUpdates();
         } else if (choice == kTrayMenuAbout) {
           ShowAbout();
         } else if (choice == kTrayMenuQuit) {
@@ -1694,6 +1699,54 @@ void MainWindow::AttachStatusBarCopyAffordance() {
   footer_flyout.Items().Append(footer_item);
   StatusBar().ContextFlyout(flyout);
   StatusText().ContextFlyout(footer_flyout);
+}
+
+// Manual check from the tray: manual=true bypasses the 4-hour family
+// throttle (the backend stamps the timestamp either way, per the update
+// trigger contract). Results surface in the footer; the `update` launcher
+// rows drive download and install from here.
+void MainWindow::CheckForUpdates() {
+  if (api_ == nullptr) {
+    SetStatusError(L"Update check once the backend is ready.");
+    return;
+  }
+  auto const dispatcher = DispatcherQueue();
+  auto const weak = get_weak();
+  auto* api = api_.get();
+  std::thread([weak, api, dispatcher]() mutable {
+    std::wstring line;
+    bool is_error = false;
+    try {
+      auto const check = api->update_check(true).get();
+      if (check.status == "available") {
+        auto const version = check.available_version.value_or(std::string("?"));
+        line = t_format("updateAvailableStatus", {to_wide(version)});
+      } else if (check.status == "up-to-date") {
+        line = t("updateUpToDate");
+      } else if (check.status == "throttled") {
+        line = L"Update check throttled — try again shortly.";
+      } else {
+        is_error = true;
+        line = t_format("updateDownloadFailed",
+                        {to_wide(check.error.value_or("check failed"))});
+      }
+    } catch (std::exception const& e) {
+      is_error = true;
+      line = to_wide(std::string("Update check failed: ") + e.what());
+    } catch (...) {
+      is_error = true;
+      line = L"Update check failed.";
+    }
+    dispatcher.TryEnqueue([weak, line, is_error]() mutable {
+      if (auto window = weak.get()) {
+        if (is_error) {
+          window->SetStatusError(line);
+        } else {
+          window->SetStatusOk(line);
+        }
+      }
+    });
+  }).detach();
 }
 
 void MainWindow::StartSilentUpdateCheck() {

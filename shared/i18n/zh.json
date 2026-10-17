@@ -1,7 +1,7 @@
 {
   "updateCheckNow": "检查更新…",
   "updateChecking": "正在检查更新…",
-  "updateUpToDate": "当前已是最新版本",
+  "updateUpToDate": "已是最新版本",
   "updateAvailableTitle": "发现新版本",
   "updateAvailableBody": "新版本 Fulcrum {0} 可用（{1}），是否下载并安装？",
   "updateDownload": "下载更新",
@@ -34,5 +34,7 @@
   "trayQuit": "退出 Fulcrum",
   "trayFixHotkey": "修复 Alt+Space 冲突",
   "hotkeyShadowed": "唤出热键 {0} 被 GNOME 的窗口菜单占用 — 托盘菜单中的「修复 Alt+Space」可解除",
-  "hotkeyFreed": "已解除 Alt+Space 占用（GNOME 窗口菜单绑定已清空），现在试试热键"
+  "hotkeyFreed": "已解除 Alt+Space 占用（GNOME 窗口菜单绑定已清空），现在试试热键",
+  "trayCheckUpdates": "检查更新…",
+  "trayAbout": "关于 Fulcrum"
 }
