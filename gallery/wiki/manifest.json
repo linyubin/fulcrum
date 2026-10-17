@@ -1,0 +1,28 @@
+{
+  "id": "wiki",
+  "name": "Wikipedia",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Web",
+  "description": "Search English Wikipedia and open the article: title and opening line per result. Type `wiki` followed by a topic.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "wiki.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "search",
+      "name": "Search Wikipedia",
+      "keyword": "wiki",
+      "description": "wiki fulcrum",
+      "example": "wiki fulcrum"
+    }
+  ],
+  "permissions": [
+    "network",
+    "open-url"
+  ]
+}

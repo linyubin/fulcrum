@@ -1,0 +1,28 @@
+{
+  "id": "npm",
+  "name": "npm Search",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Developer",
+  "description": "Search the npm registry: name@version, description and quality score; ↵ opens the package page. Type `npm` followed by a query.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "npm.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "search",
+      "name": "Search npm",
+      "keyword": "npm",
+      "description": "npm zod",
+      "example": "npm zod"
+    }
+  ],
+  "permissions": [
+    "network",
+    "open-url"
+  ]
+}

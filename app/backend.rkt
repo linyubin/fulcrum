@@ -35,6 +35,7 @@
          "update.rkt")
 
 (provide start
+         boot!
          current-engine
          current-settings
          app-version
@@ -1146,7 +1147,9 @@
                        "Open plugins directory"
                        (path->string (plugins-dir))
                        "Plugin" (path->string (plugins-dir)) "plugin" "" "Open")
-                 (map toggle-row (plugin-manager-plugins manager)))))]))
+                 (map toggle-row
+                      (append (plugin-manager-plugins manager)
+                              (plugin-manager-disabled-plugins manager))))))]))
 
 ;; ---- RPCs ---------------------------------------------------------------
 
@@ -1602,9 +1605,19 @@
 
 ;; ---- lifecycle ----------------------------------------------------------
 
-(define (start in-fd out-fd)
+;; Everything `start` does before it serves: stores, plugin manager, engine,
+;; the shared parameters. Split out so a test can boot the production
+;; wiring against a fixture data directory without RVT1 fds — the plugin
+;; manager's first load once raised because of boot ordering, and nothing
+;; exercised this path.
+(define (boot!)
   (ensure-data-dir!)
   (define manager (make-settings-manager (settings-path)))
+  ;; Published before anything that reads it through `settings!`: the plugin
+  ;; manager's first load consults the disabled-ids thunk, and with the
+  ;; parameter still unset that raised inside the loader — every installed
+  ;; plugin stayed unloaded until some later reload (an install, a toggle).
+  (current-settings manager)
   (define clip-store
     (and (settings-get manager 'clipboard-enabled)
          (make-clipboard-store (clipboard-path)
@@ -1634,12 +1647,17 @@
   ;; The startup rebuild IS the fresh state; stamping the cache here keeps
   ;; the first search from re-scanning the roots redundantly.
   (app-roots-fingerprint-cache (application-roots-fingerprint))
-  (current-settings manager)
   (current-engine engine)
   ;; The updater persists its throttle and rollout bucket in the settings
   ;; store; hand it the manager once it exists.
   (current-update-settings manager)
   (ai-restore-memory!)
+  engine)
+
+(define (start in-fd out-fd)
+  (define engine (boot!))
+  (define manager (settings!))
   (state-set! theme (settings-get manager 'theme))
   (state-set! hotkey (settings-get manager 'hotkey))
+  (void engine)
   (serve-fds in-fd out-fd))

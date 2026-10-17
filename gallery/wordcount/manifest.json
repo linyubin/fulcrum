@@ -1,0 +1,28 @@
+{
+  "id": "wordcount",
+  "name": "Word Count",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Developer",
+  "description": "Words, characters, lines, sentences and reading time. `wc some text` counts the text; a bare `wc` counts the clipboard.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "wordcount.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "count",
+      "name": "Count words",
+      "keyword": "wc",
+      "description": "wc the quick brown fox",
+      "example": "wc the quick brown fox"
+    }
+  ],
+  "permissions": [
+    "clipboard-read",
+    "clipboard-write"
+  ]
+}

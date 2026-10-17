@@ -1,0 +1,27 @@
+{
+  "id": "hash",
+  "name": "Hash",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Developer",
+  "description": "MD5, SHA-1, SHA-256 and SHA-512 digests of text. Type `hash` followed by the text: hash hello world.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "hash.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "digest",
+      "name": "Hash text",
+      "keyword": "hash",
+      "description": "hash hello world",
+      "example": "hash hello world"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "base64",
+  "name": "Base64",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Converters",
+  "description": "Base64-encode text, or decode it when the input already is Base64 (URL-safe variant too). Type `b64` followed by the text: b64 hello.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "b64.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "convert",
+      "name": "Encode or decode Base64",
+      "keyword": "b64",
+      "description": "b64 hello",
+      "example": "b64 hello"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

@@ -63,6 +63,7 @@
          plugin-manager-reload!
          plugin-manager-plugins
          plugin-manager-errors
+         plugin-manager-disabled-plugins
          plugin-manager-query
          plugin-manager-run!
          plugin-manager-run-action!
@@ -286,47 +287,51 @@
       (if thunk (thunk) '())))
   (make-directory* dir)
   (define plugins '())
+  (define disabled-plugins '())
   (define errors '())
   (for ([sub (in-list (sort (directory-list dir) string<? #:key path->string))])
     (define sub-dir (build-path dir sub))
     (when (directory-exists? sub-dir)
-      ;; Disabled plugins stay on disk; the loader just skips them.
-      (when (member (path->string sub) disabled)
-        (set! errors
-              (cons (format "~a: disabled" (path->string sub-dir))
-                    errors)))
-      (unless (member (path->string sub) disabled)
-        (define manifest-path (build-path sub-dir "manifest.json"))
-        (with-handlers ([exn:fail?
-                         (lambda (e)
-                           (set! errors
-                                 (cons (format "~a: ~a"
-                                               (path->string sub-dir)
-                                               (exn-message e))
-                                       errors)))])
-          (if (file-exists? manifest-path)
-              (let ([manifest (safe-read-json-file manifest-path)])
-                (cond
-                  [(not (hash? manifest))
-                   (set! errors
-                         (cons (format "~a: manifest is not a JSON object"
-                                       (path->string sub-dir))
-                               errors))]
-                  [else
-                   (define-values (loaded plugin-errors)
-                     (manifest->plugin sub-dir manifest))
-                   (if loaded
-                       (begin
-                         (set! plugins (cons loaded plugins))
-                         (set! errors (append (reverse plugin-errors) errors)))
-                       (set! errors
-                             (cons (format "~a: manifest missing id, name, or entry.exec"
-                                           (path->string sub-dir))
-                                   errors)))]))
-              (set! errors
-                    (cons (format "~a: missing manifest.json" (path->string sub-dir))
-                          errors)))))))
-  (set-plugin-manager-state! mgr (cons (reverse plugins) (reverse errors))))
+      ;; Disabled plugins stay on disk and keep their manifest parsed so
+      ;; the plugin center can offer to re-enable them — they just never
+      ;; answer queries. The loader used to skip them entirely, which left
+      ;; a disabled plugin invisible and impossible to re-enable.
+      (define off? (member (path->string sub) disabled))
+      (define manifest-path (build-path sub-dir "manifest.json"))
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (set! errors
+                               (cons (format "~a: ~a"
+                                             (path->string sub-dir)
+                                             (exn-message e))
+                                     errors)))])
+        (if (file-exists? manifest-path)
+            (let ([manifest (safe-read-json-file manifest-path)])
+              (cond
+                [(not (hash? manifest))
+                 (set! errors
+                       (cons (format "~a: manifest is not a JSON object"
+                                     (path->string sub-dir))
+                             errors))]
+                [else
+                 (define-values (loaded plugin-errors)
+                   (manifest->plugin sub-dir manifest))
+                 (if loaded
+                     (begin
+                       (if off?
+                           (set! disabled-plugins (cons loaded disabled-plugins))
+                           (set! plugins (cons loaded plugins)))
+                       (set! errors (append (reverse plugin-errors) errors)))
+                     (set! errors
+                           (cons (format "~a: manifest missing id, name, or entry.exec"
+                                         (path->string sub-dir))
+                                 errors)))]))
+            (set! errors
+                  (cons (format "~a: missing manifest.json" (path->string sub-dir))
+                        errors))))))
+  (set-plugin-manager-state! mgr (list (reverse plugins)
+                                       (reverse errors)
+                                       (reverse disabled-plugins))))
 
 ;; ---- FPP1 cold spawn -----------------------------------------------------
 
@@ -628,9 +633,11 @@
      (hash-clear! (unbox (plugin-manager-daemons mgr)))
      (with-handlers ([exn:fail?
                       (lambda (e)
-                        (set-plugin-manager-state! mgr (cons '() (list (exn-message e)))))])
+                        (set-plugin-manager-state! mgr (list '() (list (exn-message e)) '())))])
        (load-plugins! mgr)))))
 
+;; State is (list enabled-plugins errors disabled-plugins); the accessors
+;; below are the only readers.
 (define/contract (plugin-manager-plugins mgr)
   (-> plugin-manager? (listof plugin?))
   (define state (plugin-manager-state mgr))
@@ -639,7 +646,14 @@
 (define/contract (plugin-manager-errors mgr)
   (-> plugin-manager? (listof string?))
   (define state (plugin-manager-state mgr))
-  (if state (cdr state) '()))
+  (if state (cadr state) '()))
+
+;; Installed but turned off: parsed from disk like the live ones, listed by
+;; the plugin center so the user can turn them back on, never queried.
+(define/contract (plugin-manager-disabled-plugins mgr)
+  (-> plugin-manager? (listof plugin?))
+  (define state (plugin-manager-state mgr))
+  (if state (caddr state) '()))
 
 (define (command-matches? command query)
   ;; A command with a keyword claims queries of the form "<keyword> ..." or

@@ -1,0 +1,27 @@
+{
+  "id": "lorem",
+  "name": "Lorem Ipsum",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Developer",
+  "description": "Lorem ipsum on demand: `lorem` (a paragraph), `lorem 3`, `lorem 40 words`, `lorem 5 sentences`. ↵ copies the whole text.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "lorem.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "generate",
+      "name": "Generate placeholder text",
+      "keyword": "lorem",
+      "description": "lorem 2 paragraphs",
+      "example": "lorem 2 paragraphs"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "id": "uuid",
+  "name": "UUID",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Developer",
+  "description": "Random v4 UUIDs, one or several, lowercase or `up`. Type `uuid`, `uuid 5`, or `uuid up`.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "uuidgen.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "generate",
+      "name": "Generate UUIDs",
+      "keyword": "uuid",
+      "description": "uuid 3",
+      "example": "uuid 3"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

@@ -23,7 +23,7 @@ Press one global hotkey and a floating command palette appears:
 - **File search** — `find <query>` over Spotlight (macOS today; other platforms honestly declined)
 - **BYOK AI with streaming** — bring your own OpenAI / Anthropic / Ollama key: `ai summarize`, `ai clean`, `ai translate <lang>`, `ai explain`, `ai chat <msg>`, `ai <question>` — the answer streams into the panel as it is generated and copies to your clipboard when done; the key never leaves this machine (never synced)
 - **System commands** — lock, sleep, restart
-- **Plugins** — any language that speaks JSON over stdio ([FPP1](docs/plugins.md)), plus eleven first-party plugins installed from the launcher itself (query `gallery`)
+- **Plugins** — any language that speaks JSON over stdio ([FPP1](docs/plugins.md)), plus twenty-six first-party plugins installed from the launcher itself (query `gallery`)
 - **Sync (beta)** — settings and snippets mirrored to any cloud-synced folder; a wiped machine restores from the mirror
 
 Search, history, and snippets never leave your device. There is no telemetry.
@@ -61,7 +61,7 @@ fulcrum/
 
 ## Status (developer preview)
 
-Developer preview. The backend is complete and tested (81 test cases over ranking, stores, plugins, AI, and the signed update pipeline) and ships an eleven-plugin first-party gallery (query `gallery` to install) plus a settings/snippets sync beta (`sync-root`). All three hosts track the backend contract: Windows (WinUI 3), macOS (SwiftUI), and Linux (GTK4) — the Linux host builds through the official `raco rivet build` Linux path introduced in [Rivet 0.3](https://github.com/turinglambdaai/rivet). Known platform edges are stated in the [user guide](docs/user-guide.md#troubleshooting) rather than papered over: file search is macOS-only, and the Linux host wants `wtype` for paste-to-frontmost on Wayland. `raco rivet doctor` / `dev` is the supported developer loop on every platform.
+Developer preview. The backend is complete and tested (81 test cases over ranking, stores, plugins, AI, and the signed update pipeline) and ships a twenty-six-plugin first-party gallery (query `gallery` to install) plus a settings/snippets sync beta (`sync-root`). All three hosts track the backend contract: Windows (WinUI 3), macOS (SwiftUI), and Linux (GTK4) — the Linux host builds through the official `raco rivet build` Linux path introduced in [Rivet 0.3](https://github.com/turinglambdaai/rivet). Known platform edges are stated in the [user guide](docs/user-guide.md#troubleshooting) rather than papered over: file search is macOS-only, and the Linux host wants `wtype` for paste-to-frontmost on Wayland. `raco rivet doctor` / `dev` is the supported developer loop on every platform.
 
 ## Development
 

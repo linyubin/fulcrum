@@ -1,0 +1,28 @@
+{
+  "id": "dict",
+  "name": "Dictionary",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Web",
+  "description": "English definitions with part of speech, phonetics and an example, from the free dictionaryapi.dev. Type `define` followed by a word.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "define.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "define",
+      "name": "Define a word",
+      "keyword": "define",
+      "description": "define serendipity",
+      "example": "define serendipity"
+    }
+  ],
+  "permissions": [
+    "network",
+    "clipboard-write"
+  ]
+}
