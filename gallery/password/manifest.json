@@ -1,0 +1,27 @@
+{
+  "id": "password",
+  "name": "Password Generator",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Security",
+  "description": "Strong random passwords from the OS entropy source: `pw` (20 chars), `pw 32`, `pw 16 nosym`, or `pw words` for a passphrase.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "password.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "generate",
+      "name": "Generate a password",
+      "keyword": "pw",
+      "description": "pw 24",
+      "example": "pw 24"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

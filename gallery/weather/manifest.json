@@ -1,0 +1,28 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Web",
+  "description": "Current conditions and the next days for your location (`wx`) or a place (`wx Tokyo`), from wttr.in. ↵ copies a line.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "weather.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "forecast",
+      "name": "Show the weather",
+      "keyword": "wx",
+      "description": "wx Tokyo",
+      "example": "wx Tokyo"
+    }
+  ],
+  "permissions": [
+    "network",
+    "clipboard-write"
+  ]
+}

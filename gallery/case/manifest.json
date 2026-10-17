@@ -1,0 +1,27 @@
+{
+  "id": "case",
+  "name": "Case Converter",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Converters",
+  "description": "Every casing of the text at once — UPPER, Title, camelCase, PascalCase, snake_case, kebab-case, SCREAMING_SNAKE, dot.case. Type `case` followed by the text.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "case.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "convert",
+      "name": "Change text case",
+      "keyword": "case",
+      "description": "case hello big world",
+      "example": "case hello big world"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

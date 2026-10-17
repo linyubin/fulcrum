@@ -1,0 +1,27 @@
+{
+  "id": "base",
+  "name": "Number Base",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Converters",
+  "description": "Decimal, hex, octal and binary forms of a number, plus the Unicode glyph for a code point: base 255, base 0xff, base 0b1010.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "base.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "convert",
+      "name": "Convert number base",
+      "keyword": "base",
+      "description": "base 0xD97706",
+      "example": "base 0xD97706"
+    }
+  ],
+  "permissions": [
+    "clipboard-write"
+  ]
+}

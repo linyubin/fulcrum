@@ -35,6 +35,7 @@
          "update.rkt")
 
 (provide start
+         boot!
          current-engine
          current-settings
          app-version
@@ -186,23 +187,34 @@
   '("ai" "about" "settings" "quicklinks" "links" "gallery" "plugins"
     "update" "updates"))
 
+;; The one row every settings surface leads with: hosts map it to their
+;; native settings window (the same delegation shape as about.open). The
+;; query-syntax rows below it stay for people who prefer typing.
+(define (settings-open-row)
+  (list "settings.open"
+        "Settings…"
+        "Theme, hotkey, AI provider and key, sync, updates — in a window"
+        "Setting" "" "setting" "" "Open"))
+
 (define (settings-quick-rows)
-  (for/list ([key (in-list '(theme hotkey language ai-provider))])
-    (define val (settings-get (settings!) key))
-    (define label
-      (case key
-        [(theme) "Theme"]
-        [(hotkey) "Hotkey"]
-        [(language) "Language"]
-        [(ai-provider) "AI Provider"]
-        [else (format "~a" key)]))
-    (list "settings.set"
-          (format "~a  ·  ~a" label val)
-          "↵ cycles to the next value"
-          "Setting"
-          (symbol->string key)
-          "setting" "" ""
-          (format "~a" val))))
+  (cons
+   (settings-open-row)
+   (for/list ([key (in-list '(theme hotkey language ai-provider))])
+     (define val (settings-get (settings!) key))
+     (define label
+       (case key
+         [(theme) "Theme"]
+         [(hotkey) "Hotkey"]
+         [(language) "Language"]
+         [(ai-provider) "AI Provider"]
+         [else (format "~a" key)]))
+     (list "settings.set"
+           (format "~a  ·  ~a" label val)
+           "↵ cycles to the next value"
+           "Setting"
+           (symbol->string key)
+           "setting" ""
+           (format "~a" val)))))
 
 ;; ---- about-as-rows --------------------------------------------------------
 ;;
@@ -300,26 +312,34 @@
 
 (define (settings-rows query)
   (define s (settings!))
-  (for/list ([key (in-list managed-setting-keys)]
-             #:when (fuzzy-score-fields
-                     (string-trim query)
-                     (list (cons 1.0 (symbol->string key))
-                           (cons 0.7 "settings setting")
-                           (cons 0.3 (format "~a" (settings-get s key))))))
-    (define value (settings-get s key))
-    (list "settings.set"
-          (format "~a" key)
-          (case key
-            [(language) "UI language · select to toggle zh ↔ en (update dialogs follow it)"]
-            [(theme) "UI theme · select to cycle system → light → dark"]
-            [(hotkey) "Global hotkey · select to cycle alt+space → ctrl+alt+space → ctrl+shift+space → alt+shift+space"]
-            [(max-results) "Maximum results shown · select to cycle"]
-            [(ai-provider) "BYOK AI provider · select to cycle empty → openai → anthropic → ollama"]
-            [else "Select to toggle"])
-          "Setting"
-          (symbol->string key)
-          "setting" ""
-          (setting-badge value))))
+  (define trimmed (string-trim query))
+  (define key-rows
+    (for/list ([key (in-list managed-setting-keys)]
+               #:when (fuzzy-score-fields
+                       trimmed
+                       (list (cons 1.0 (symbol->string key))
+                             (cons 0.7 "settings setting")
+                             (cons 0.3 (format "~a" (settings-get s key))))))
+      (define value (settings-get s key))
+      (list "settings.set"
+            (format "~a" key)
+            (case key
+              [(language) "UI language · select to toggle zh ↔ en (update dialogs follow it)"]
+              [(theme) "UI theme · select to cycle system → light → dark"]
+              [(hotkey) "Global hotkey · select to cycle alt+space → ctrl+alt+space → ctrl+shift+space → alt+shift+space"]
+              [(max-results) "Maximum results shown · select to cycle"]
+              [(ai-provider) "BYOK AI provider · select to cycle empty → openai → anthropic → ollama"]
+              [else "Select to toggle"])
+            "Setting"
+            (symbol->string key)
+            "setting" ""
+            (setting-badge value))))
+  ;; The window row leads whenever the query is about settings at all.
+  (if (fuzzy-score-fields
+       trimmed
+       (list (cons 1.0 "settings") (cons 0.6 "preferences options configure")))
+      (cons (settings-open-row) key-rows)
+      key-rows))
 
 (define (settings-act! key)
   (define sym (string->symbol key))
@@ -1127,7 +1147,9 @@
                        "Open plugins directory"
                        (path->string (plugins-dir))
                        "Plugin" (path->string (plugins-dir)) "plugin" "" "Open")
-                 (map toggle-row (plugin-manager-plugins manager)))))]))
+                 (map toggle-row
+                      (append (plugin-manager-plugins manager)
+                              (plugin-manager-disabled-plugins manager))))))]))
 
 ;; ---- RPCs ---------------------------------------------------------------
 
@@ -1146,12 +1168,15 @@
 (define app-roots-fingerprint-cache (make-parameter #f))
 
 ;; Shared by the search RPC (staleness-gated) and index-rebuild (explicit);
-;; returns the new index size. Discovery failures propagate to the caller's
+;; returns the rebuilt index's key count. That is not the discovery list's
+;; length on every platform: overlapping roots can hand back several bundles
+;; under one resolved path, and the index is keyed by id, so the count is
+;; read off the index itself. Discovery failures propagate to the caller's
 ;; guard so a platform-specific error degrades, never kills the worker.
 (define (rebuild-app-index!)
-  (define count (engine-rebuild-index! (engine!)))
+  (engine-rebuild-index! (engine!))
   (app-roots-fingerprint-cache (application-roots-fingerprint))
-  count)
+  (engine-app-count (engine!)))
 
 (define (refresh-app-index-if-stale!)
   (when (apps-index-stale? (app-roots-fingerprint-cache))
@@ -1185,6 +1210,10 @@
   ;; before the engine.
   (define outcome
     (cond
+      [(string=? id "settings.open")
+       ;; The settings window is host-native (same delegation shape as
+       ;; about.open); checked before the settings. prefix router.
+       (cons "delegated" '())]
       [(string-prefix? id "settings.") (settings-act! arg)]
       [(string-prefix? id "ai.") (ai-act! (engine!) id arg)]
       [(or (string=? id "plugin.set") (string=? id "plugin.pref.cycle"))
@@ -1303,10 +1332,12 @@
     [(max-results clipboard-limit plugins-timeout-ms update-last-check update-rollout-bucket)
      (define n (string->number (string-trim value)))
      (if n n (raise-argument-error 'settings-set "numeric string" value))]
-    [(clipboard-enabled web-search-enabled plugins-enabled)
+    [(clipboard-enabled web-search-enabled plugins-enabled expansion-enabled)
+     ;; on/off is what settings-list emits and the badges show; true/false
+     ;; and 1/0 stay accepted for scripts.
      (cond
-       [(member (string-trim value) '("true" "1")) #t]
-       [(member (string-trim value) '("false" "0")) #f]
+       [(member (string-trim value) '("true" "1" "on")) #t]
+       [(member (string-trim value) '("false" "0" "off")) #f]
        [else (raise-argument-error 'settings-set "boolean string" value)])]
     [else value]))
 
@@ -1329,6 +1360,13 @@
     [(theme) (state-set! theme (settings-get (settings!) 'theme))]
     [(hotkey) (state-set! hotkey (settings-get (settings!) 'hotkey))])
   #t)
+
+;; Readiness of the configured AI provider, for the settings window's AI
+;; section: "ready", or the honest reason it is not (no provider, no key).
+;; The key itself never crosses the wire.
+(define-rpc (ai-status : String)
+  (define provider (ai-effective-provider))
+  (ai-configured-status provider (ai-get-key (ai-keys-path) provider)))
 
 ;; ---- plugins ------------------------------------------------------------
 
@@ -1567,9 +1605,19 @@
 
 ;; ---- lifecycle ----------------------------------------------------------
 
-(define (start in-fd out-fd)
+;; Everything `start` does before it serves: stores, plugin manager, engine,
+;; the shared parameters. Split out so a test can boot the production
+;; wiring against a fixture data directory without RVT1 fds — the plugin
+;; manager's first load once raised because of boot ordering, and nothing
+;; exercised this path.
+(define (boot!)
   (ensure-data-dir!)
   (define manager (make-settings-manager (settings-path)))
+  ;; Published before anything that reads it through `settings!`: the plugin
+  ;; manager's first load consults the disabled-ids thunk, and with the
+  ;; parameter still unset that raised inside the loader — every installed
+  ;; plugin stayed unloaded until some later reload (an install, a toggle).
+  (current-settings manager)
   (define clip-store
     (and (settings-get manager 'clipboard-enabled)
          (make-clipboard-store (clipboard-path)
@@ -1599,12 +1647,17 @@
   ;; The startup rebuild IS the fresh state; stamping the cache here keeps
   ;; the first search from re-scanning the roots redundantly.
   (app-roots-fingerprint-cache (application-roots-fingerprint))
-  (current-settings manager)
   (current-engine engine)
   ;; The updater persists its throttle and rollout bucket in the settings
   ;; store; hand it the manager once it exists.
   (current-update-settings manager)
   (ai-restore-memory!)
+  engine)
+
+(define (start in-fd out-fd)
+  (define engine (boot!))
+  (define manager (settings!))
   (state-set! theme (settings-get manager 'theme))
   (state-set! hotkey (settings-get manager 'hotkey))
+  (void engine)
   (serve-fds in-fd out-fd))

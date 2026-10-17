@@ -4,6 +4,7 @@
 #include "MainWindow.g.cpp"
 #endif
 #include "GeneratedBackend.hpp"
+#include "SettingsWindow.xaml.h"
 #include "WindowCommands.h"
 
 #include <shellapi.h>
@@ -23,6 +24,7 @@ constexpr UINT kTrayIconId = 0xF11D;
 constexpr int kTrayMenuOpen = 1;
 constexpr int kTrayMenuAbout = 2;
 constexpr int kTrayMenuQuit = 3;
+constexpr int kTrayMenuSettings = 4;
 
 constexpr int kHotkeyIdPrimary = 0xF11C;  // Alt+Space
 constexpr int kHotkeyIdFallback = 0xF11D; // Ctrl+Alt+Space
@@ -136,13 +138,139 @@ rivet::windows::RacketRuntimeConfig runtime_config() {
   return config;
 }
 
-std::wstring result_line(rivet_app::ResultRow const& row) {
-  std::wstring line = to_wide(row.title);
-  if (!row.subtitle.empty()) {
-    line += L"  —  ";
-    line += to_wide(row.subtitle);
+// ---- result row visuals -----------------------------------------------------
+//
+// Rows are built in code rather than a XAML data template: the row contract
+// carries icon/badge/hint fields a plain string item cannot express, and a
+// code-built visual tree needs no IDL-registered row type. Visual grammar
+// matches the macOS host: amber (#D97706) icon tiles and chips, an inset
+// rounded selection (App.xaml theme overrides paint it), and the ↵ chip
+// only on the selected row.
+
+constexpr BYTE kAmberRed = 0xD9;
+constexpr BYTE kAmberGreen = 0x77;
+constexpr BYTE kAmberBlue = 0x06;
+
+winrt::Windows::UI::Color amber_color(BYTE alpha) {
+  return winrt::Windows::UI::Color{alpha, kAmberRed, kAmberGreen, kAmberBlue};
+}
+
+// Segoe Fluent Icons codepoints (the FontIcon default font family).
+wchar_t const* row_glyph(rivet_app::ResultRow const& row) {
+  if (row.kind == "Calculator") return L"\uE945";  // LightningBolt
+  if (row.kind == "Clipboard") return L"\uE77F";   // Paste
+  if (row.kind == "Snippet") return L"\uE70F";     // Edit
+  if (row.kind == "Quicklink") return L"\uE71B";   // Link
+  if (row.kind == "Web Search") return L"\uE774";  // World
+  if (row.kind == "Plugin") return L"\uE71D";      // AllApps
+  if (row.kind == "System") {
+    return row.id == "sys.lock" ? L"\uE72E" : L"\uE713";  // Lock / Settings
   }
-  return line;
+  if (row.kind == "Setting") return L"\uE713";         // Settings
+  if (row.kind == "Window") return L"\uE739";          // BackToWindow
+  if (row.kind == "Update") return L"\uE74E";          // Download
+  if (row.kind == "AI") return L"\uE945";              // LightningBolt
+  if (row.kind == "File") return L"\uE8A5";            // Document
+  return L"\uE721";                                    // Search
+}
+
+winrt::Microsoft::UI::Xaml::Controls::Border make_chip(
+    std::wstring const& text, float font_size) {
+  namespace mx = winrt::Microsoft::UI::Xaml;
+  namespace mxc = winrt::Microsoft::UI::Xaml::Controls;
+  namespace wum = winrt::Microsoft::UI::Xaml::Media;
+
+  mxc::TextBlock label;
+  label.Text(text);
+  label.FontSize(font_size);
+  label.Foreground(wum::SolidColorBrush{amber_color(0xFF)});
+  label.VerticalAlignment(mx::VerticalAlignment::Center);
+
+  mxc::Border chip;
+  chip.Background(wum::SolidColorBrush{amber_color(0x24)});
+  chip.CornerRadius({10, 10, 10, 10});
+  chip.Padding({7, 1, 7, 2});
+  chip.VerticalAlignment(mx::VerticalAlignment::Center);
+  chip.Child(label);
+  return chip;
+}
+
+struct RowContent {
+  winrt::Microsoft::UI::Xaml::Controls::Grid root{nullptr};
+  winrt::Microsoft::UI::Xaml::Controls::Border enter_chip{nullptr};
+};
+
+RowContent build_row_content(rivet_app::ResultRow const& row) {
+  namespace mx = winrt::Microsoft::UI::Xaml;
+  namespace mxc = winrt::Microsoft::UI::Xaml::Controls;
+  namespace wum = winrt::Microsoft::UI::Xaml::Media;
+
+  mxc::Grid root;
+  root.Margin({12, 7, 12, 7});
+
+  std::array<mx::GridLength, 4> const widths = {
+      mx::GridLengthHelper::Auto(),
+      mx::GridLengthHelper::FromValueAndType(1, mx::GridUnitType::Star),
+      mx::GridLengthHelper::Auto(),
+      mx::GridLengthHelper::Auto()};
+  for (auto const& width : widths) {
+    mxc::ColumnDefinition column;
+    column.Width(width);
+    root.ColumnDefinitions().Append(column);
+  }
+
+  // Icon tile: fixed 28pt amber-tinted square, glyph centered.
+  mxc::FontIcon icon;
+  icon.Glyph(row_glyph(row));
+  icon.FontSize(14);
+  mxc::Border icon_tile;
+  icon_tile.Width(28);
+  icon_tile.Height(28);
+  icon_tile.CornerRadius({6, 6, 6, 6});
+  icon_tile.Background(wum::SolidColorBrush{amber_color(0x1F)});
+  icon_tile.Padding({6, 6, 6, 6});
+  icon_tile.Child(icon);
+  icon_tile.VerticalAlignment(mx::VerticalAlignment::Center);
+  mx::Controls::Grid::SetColumn(icon_tile, 0);
+  root.Children().Append(icon_tile);
+
+  // Title + muted subtitle stacked.
+  auto const& subtitle = row.subtitle.empty() ? row.kind : row.subtitle;
+  mxc::TextBlock title;
+  title.Text(to_wide(row.title));
+  title.FontSize(13.5);
+  title.FontWeight({600});
+  title.TextTrimming(mx::TextTrimming::CharacterEllipsis);
+  title.MaxLines(1);
+  mxc::TextBlock subtitle_label;
+  subtitle_label.Text(to_wide(subtitle));
+  subtitle_label.FontSize(11.5);
+  subtitle_label.Opacity(0.6);
+  subtitle_label.TextTrimming(mx::TextTrimming::CharacterEllipsis);
+  subtitle_label.MaxLines(1);
+  mxc::StackPanel texts;
+  texts.Spacing(2);
+  texts.VerticalAlignment(mx::VerticalAlignment::Center);
+  texts.Margin({10, 0, 8, 0});
+  texts.Children().Append(title);
+  texts.Children().Append(subtitle_label);
+  mx::Controls::Grid::SetColumn(texts, 1);
+  root.Children().Append(texts);
+
+  if (!row.badge.empty()) {
+    auto badge = make_chip(to_wide(row.badge), 10);
+    badge.Margin({0, 0, 8, 0});
+    mx::Controls::Grid::SetColumn(badge, 2);
+    root.Children().Append(badge);
+  }
+
+  // ↵ affordance: only the selected row shows it (UpdateEnterChips).
+  auto enter_chip = make_chip(L"\u21B5", 11);
+  enter_chip.Visibility(mx::Visibility::Collapsed);
+  mx::Controls::Grid::SetColumn(enter_chip, 3);
+  root.Children().Append(enter_chip);
+
+  return {root, enter_chip};
 }
 
 // ---- hotkey grammar -------------------------------------------------------
@@ -646,6 +774,23 @@ void MainWindow::FinishNativeSetup() {
   // releases; the official interop call is the 0.2 follow-up.
   auto const hwnd = ::FindWindowW(nullptr, L"Fulcrum");
 
+  // Frosted glass: the system Desktop Acrylic backdrop is the window's
+  // surface (the root grid paints nothing). The macOS host's vibrancy is
+  // the same design intent on its native stack. Chromeless: no title bar,
+  // the panel content IS the window.
+  try {
+    SystemBackdrop(winrt::Microsoft::UI::Xaml::Media::DesktopAcrylicBackdrop());
+    ExtendsContentIntoTitleBar(true);
+    SetTitleBar(nullptr);
+  } catch (...) {
+    // A system backdrop or titlebar surface that fails to attach must not
+    // take the launcher down; the window just stays opaque.
+  }
+
+  // The ↵ chip follows the list selection.
+  ResultsList().SelectionChanged(
+      [this](auto&&, auto&&) { UpdateEnterChips(); });
+
   // Overlay chrome: resizable off, not shown in taskbar/alt-tab, topmost,
   // positioned at the top quarter of the work area — all plain Win32 so we
   // do not depend on newer WindowsAppSDK windowing surfaces.
@@ -747,6 +892,7 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
       HMENU menu = ::CreatePopupMenu();
       if (menu != nullptr) {
         ::AppendMenuW(menu, MF_STRING, kTrayMenuOpen, L"Open Fulcrum");
+        ::AppendMenuW(menu, MF_STRING, kTrayMenuSettings, L"Settings…");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuAbout, L"About Fulcrum");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuQuit, L"Quit Fulcrum");
         ::SetForegroundWindow(hwnd);  // so outside clicks dismiss the menu
@@ -755,6 +901,8 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
         ::DestroyMenu(menu);
         if (choice == kTrayMenuOpen) {
           ShowLauncher();
+        } else if (choice == kTrayMenuSettings) {
+          ShowSettings();
         } else if (choice == kTrayMenuAbout) {
           ShowAbout();
         } else if (choice == kTrayMenuQuit) {
@@ -1132,13 +1280,31 @@ void MainWindow::ApplyActions(std::vector<rivet_app::ResultRow> rows) {
 void MainWindow::ApplyResults(std::vector<rivet_app::ResultRow> rows) {
   actions_mode_ = false;
   rows_ = std::move(rows);
-  auto items = winrt::single_threaded_observable_vector<winrt::hstring>();
+  auto items = ResultsList().Items();
+  items.Clear();
+  enter_chips_.clear();
   for (auto const& row : rows_) {
-    items.Append(result_line(row));
+    auto content = build_row_content(row);
+    enter_chips_.push_back(content.enter_chip);
+    winrt::Microsoft::UI::Xaml::Controls::ListViewItem item;
+    item.Content(content.root);
+    items.Append(item);
   }
-  ResultsList().ItemsSource(items);
   if (!rows_.empty()) {
     ResultsList().SelectedIndex(0);
+  } else {
+    ResultsList().SelectedIndex(-1);
+  }
+  UpdateEnterChips();
+}
+
+void MainWindow::UpdateEnterChips() {
+  auto const selected = ResultsList().SelectedIndex();
+  for (std::size_t i = 0; i < enter_chips_.size(); ++i) {
+    enter_chips_[i].Visibility(
+        static_cast<int>(i) == selected
+            ? winrt::Microsoft::UI::Xaml::Visibility::Visible
+            : winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
   }
 }
 
@@ -1266,9 +1432,13 @@ void MainWindow::RunSelected() {
             window->StartUpdateProgressPoll();
           } else if (status == "delegated") {
             // Host-native actions: window commands reach other apps'
-            // windows; about.open renders this app's about dialog.
+            // windows; about.open and settings.open render this app's own
+            // windows.
             if (row.id == "about.open") {
               window->ShowAbout();
+            } else if (row.id == "settings.open") {
+              window->HideLauncher();
+              window->ShowSettings();
             } else if (fulcrum::RunWindowCommand(row.id)) {
               window->HideLauncher();
             } else {
@@ -1334,6 +1504,26 @@ winrt::fire_and_forget MainWindow::ShowAbout() {
   dialog.CloseButtonText(t("updateClose"));
   dialog.XamlRoot(Content().XamlRoot());
   co_await dialog.ShowAsync();
+}
+
+// ---- settings -------------------------------------------------------------
+
+// The tray menu's "Settings…" and the `settings` launcher row land here: a
+// separate top-level window over the backend settings store (the launcher
+// overlay hides on focus loss, so settings cannot live inside it). One
+// instance; every show re-attaches, which reloads the current values.
+void MainWindow::ShowSettings() {
+  if (api_ == nullptr) {
+    SetStatusError(L"Settings open once the backend is ready.");
+    return;
+  }
+  if (settings_window_ == nullptr) {
+    auto window = winrt::make<SettingsWindow>();
+    window.Closed([this](auto&&, auto&&) { settings_window_ = nullptr; });
+    settings_window_ = window;
+  }
+  winrt::get_self<SettingsWindow>(settings_window_)->Attach(api_.get());
+  settings_window_.Activate();
 }
 
 // ---- snippet auto-expansion ----------------------------------------------
@@ -1470,20 +1660,23 @@ void MainWindow::RefreshExpansionData() {
 }
 
 void MainWindow::SetStatusOk(std::wstring const& message) {
+  // Routine status lives quietly in the footer; the InfoBar strip is
+  // reserved for things that need attention (errors, download failures).
   last_status_ = message;
-  StatusBar().Severity(
-      Microsoft::UI::Xaml::Controls::InfoBarSeverity::Success);
-  StatusBar().Message(message);
+  StatusText().Text(message);
+  StatusBar().IsOpen(false);
 }
 
 void MainWindow::SetStatusError(std::wstring const& message) {
   last_status_ = message;
+  StatusText().Text(message);
+  StatusBar().IsOpen(true);
   StatusBar().Severity(Microsoft::UI::Xaml::Controls::InfoBarSeverity::Error);
   StatusBar().Message(message);
 }
 
-// Right-click the status bar → "Copy message": errors and results that
-// only live in the status line must be copyable.
+// Right-click either status surface → "Copy message": errors and results
+// that only live in the status line must be copyable.
 void MainWindow::AttachStatusBarCopyAffordance() {
   auto flyout = winrt::Microsoft::UI::Xaml::Controls::MenuFlyout{};
   auto item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
@@ -1492,7 +1685,15 @@ void MainWindow::AttachStatusBarCopyAffordance() {
     WriteClipboardText(last_status_);
   });
   flyout.Items().Append(item);
+  auto footer_flyout = winrt::Microsoft::UI::Xaml::Controls::MenuFlyout{};
+  auto footer_item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
+  footer_item.Text(L"Copy message");
+  footer_item.Click([this](auto&&, auto&&) {
+    WriteClipboardText(last_status_);
+  });
+  footer_flyout.Items().Append(footer_item);
   StatusBar().ContextFlyout(flyout);
+  StatusText().ContextFlyout(footer_flyout);
 }
 
 void MainWindow::StartSilentUpdateCheck() {

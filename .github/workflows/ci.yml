@@ -105,21 +105,33 @@ jobs:
           done
 
   windows-host:
-    name: Windows host compile smoke
+    # The same path the release leg takes (setup-racket → rivet pin →
+    # raco rivet build): a bare msbuild cannot see rivet's runtime headers
+    # or the generated client, so it only ever failed fast — and behind
+    # continue-on-error that read as green. This job is the Windows leg's
+    # judge: MSVC + the XAML compiler on the real host sources.
+    name: Windows host (official build)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v2
-      - name: Build WinUI host
-        working-directory: windows
-        env:
-          # Windows App SDK + Rivet host build need the generated .g.h/.g.cpp
-          # from a full raco rivet build; msbuild here exercises the XAML
-          # compiler and C++20 sources.
-          RIVET_SKIP_NATIVE: '1'
-        run: msbuild RivetHost.vcxproj /p:Configuration=Release /p:Platform=x64 /m
-        continue-on-error: true
+      - name: Install Racket (CS)
+        uses: Bogdanp/setup-racket@v1.15
+        with:
+          version: stable
+          distribution: full
+          architecture: x64
+      - name: Install Rivet (catalog)
+        run: raco pkg install --auto --no-docs 'https://github.com/turinglambdaai/rivet.git#${{ env.RIVET_PIN }}'
+        shell: bash
+      - name: raco rivet doctor
+        run: raco rivet doctor
+        shell: bash
+      - name: raco rivet build
+        run: raco rivet build
+        shell: bash
+      - name: Staged host
+        run: ls -R .rivet/stage | head -60
+        shell: bash
 
   plugin-fixture:
     name: FPP1 fixture plugin end-to-end

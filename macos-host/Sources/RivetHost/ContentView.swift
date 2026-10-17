@@ -139,10 +139,12 @@ struct VisualEffectBackground: NSViewRepresentable {
 /// One result row, Raycast-style: leading icon, title + muted subtitle,
 /// trailing badge, and — only on the selected row — the ↵ affordance chip.
 /// The selection highlight is an inset rounded rectangle, not the
-/// system full-width bar.
+/// system full-width bar; pointer hover paints a whisper of the same tint
+/// so mouse users see what a click would land on.
 struct ResultRowView: View {
     let row: ResultRow
     let isSelected: Bool
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -184,9 +186,12 @@ struct ResultRowView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isSelected
                       ? FulcrumTheme.accent.opacity(0.14)
-                      : Color.clear)
+                      : hovering ? Color.primary.opacity(0.05) : Color.clear)
         )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            self.hovering = hovering
+        }
     }
 }
 
@@ -224,6 +229,7 @@ struct AiStreamView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollIndicators(.hidden)
             .frame(maxHeight: 170)
             if state.phase == "done" {
                 Text("Answer copied to the clipboard · esc dismisses")
@@ -302,6 +308,7 @@ struct PluginDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollIndicators(.hidden)
             .frame(maxHeight: 190)
         }
         .padding(.horizontal, 18)
@@ -362,6 +369,7 @@ struct LauncherView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 8)
                     }
+                    .scrollIndicators(.hidden)
                     .onChange(of: model.selection) { _, newValue in
                         if let newValue {
                             proxy.scrollTo(newValue, anchor: .center)
@@ -370,8 +378,10 @@ struct LauncherView: View {
                     }
                 }
             } else {
-                VStack(spacing: 10) {
-                    ProgressView()
+                VStack(spacing: 12) {
+                    Image(systemName: "command")
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundStyle(FulcrumTheme.accent.opacity(0.8))
                     Text(model.status)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -445,6 +455,13 @@ struct FulcrumAPI {
     func settingsList() async throws -> [ResultRow] {
         (try await generated.settings_list()).compactMap { ResultRow.from($0) }
     }
+    /// settings-list rows carry the value in the title column and the
+    /// description in the subtitle column (badge is empty — reading it is
+    /// the historical bug that left language and expansion settings dead).
+    func settingsSet(key: String, value: String) async throws -> Bool {
+        try await generated.settings_set(key: key, value: value)
+    }
+    func aiStatus() async throws -> String { try await generated.ai_status() }
     func updateCheck(manual: Bool) async throws -> RivetTypes.UpdateCheck {
         try await generated.update_check(manual: manual)
     }
@@ -702,9 +719,12 @@ final class LauncherModel: ObservableObject {
                         self.hide()
                     case "delegated":
                         // Host-native actions: the backend cannot reach
-                        // other apps' windows or this app's About panel.
+                        // other apps' windows or this app's own windows.
                         if row.id == "about.open" {
                             AppDelegate.shared?.showAboutPanel()
+                            self.hide()
+                        } else if row.id == "settings.open" {
+                            AppDelegate.shared?.showSettingsWindow()
                             self.hide()
                         } else if WindowCommands.performAndRemember(id: row.id) {
                             self.hide()

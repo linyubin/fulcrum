@@ -6,7 +6,75 @@ independently per platform packaging run.
 
 ## [Unreleased]
 
+### Added
+
+- **A settings window on all three platforms.** Until now every setting
+  lived behind query syntax (`settings`, `ai key …`, `ai model …`) — fine
+  once you know it, invisible until you do. The launcher's leading
+  `Settings…` row, the menu bar / tray menu, and ⌘, on macOS now open a
+  native window over the same settings store: General (language, theme,
+  hotkey, result count), Features (clipboard history and its limit, web
+  search rows and default bang, snippet expansion, plugins and their
+  timeout), AI (provider, model, base URL, persona, and the API key with a
+  live readiness line — the key is saved locally and never crosses the
+  wire back), Sync & Updates (sync folder, update feed). Edits apply as
+  you make them; a value the backend refuses (a bad hotkey, an
+  out-of-range number) is reported inline and the form falls back to the
+  stored value. SwiftUI grouped form on macOS, a Mica window in the
+  Windows Settings idiom, GTK on Linux. The query rows stay for typing.
+
+- **Fifteen new first-party plugins — Raycast's developer-and-info belt.**
+  The gallery grows from eleven to twenty-six. Offline tools: Hash
+  (`hash`), Base64 (`b64`, encodes and detects-decodes), UUID (`uuid`),
+  Password Generator (`pw`, entropy-source passwords and passphrases),
+  Lorem Ipsum (`lorem`), Color (`color`, HEX/RGB/HSL with a readability
+  hint), Case Converter (`case`, every casing at once), Number Base
+  (`base`, dec/hex/oct/bin plus the Unicode glyph), Word Count (`wc`,
+  clipboard-aware). Keyless web plugins: IP Address (`ip`), Hacker News
+  (`hn`, Algolia), Dictionary (`define`, dictionaryapi.dev), npm Search
+  (`npm`), Weather (`wx`, wttr.in), Wikipedia (`wiki`). All standard
+  library only, all cross-platform, all smoke-tested through the wire
+  protocol; the slowest feed stays inside the default plugin timeout.
+
 ### Fixed
+
+- **Plugins were dead after every restart.** The backend built its plugin
+  manager before publishing the settings store, and the manager's first
+  load consults the disabled-plugins setting — that consult raised, the
+  load aborted, and every installed plugin stayed unloaded until some
+  later reload (an install, a toggle). Boot order is fixed, and a
+  regression test boots the production wiring against a fixture directory.
+
+- **A disabled plugin could never be re-enabled.** The loader skipped
+  disabled directories entirely, so the plugin center — which lists only
+  loaded plugins — lost them the moment you turned one off. Disabled
+  plugins are now parsed and listed with an Enable row.
+
+- **Three settings that never worked.** The settings-list contract
+  spelled booleans `#t`/`#f` while every host compared against `off`, so
+  "off" never matched — snippet auto-expansion could not be turned off on
+  any platform, and the language setting was read from the wrong column
+  on macOS (always empty, so it never applied). Booleans now travel as
+  `on`/`off` end to end, and settings-set accepts those words back along
+  with the script spellings true/false/1/0.
+
+- **The quick settings rows were nine cells wide.** The row contract is
+  eight; hosts that check the width (macOS) silently dropped them, so an
+  empty query never showed the theme/hotkey/language rows it promised.
+  They are eight cells now, and a wire test asserts the width of every
+  row in every query so this class of bug cannot ship again.
+
+- **macOS: a stray "Fulcrum Settings" window appeared on every launch.**
+  The About panel rode a SwiftUI Settings scene, and on current macOS
+  every SwiftUI window scene presents its window at launch — so an About
+  panel sat behind the launcher from the first start. The scene is gone;
+  About opens on demand from the menu bar, the app menu and the `about`
+  row, in its own window.
+
+- **macOS: the About panel could show the wrong version.** It read the
+  bundle's Info.plist, packaging metadata that drifts on a hand-assembled
+  bundle; it now shows the version compiled into the binary — the same
+  number the backend reports and the updater compares against.
 
 - **The macOS menu bar showed the app name instead of an icon.** The
   status item was installed with a text title, so it read as yet another
@@ -28,6 +96,34 @@ independently per platform packaging run.
   the serve worker, is wired back in — that hang is gone (fixed by
   rivet's keep-dispatch-live work, verified against both main and the
   v0.11.0 pin).
+
+### Changed
+
+- **macOS: Fulcrum is now a menu bar app — no Dock icon.** The launcher
+  convention (Spotlight, Raycast, Alfred): the menu bar glyph and the
+  hotkey are the ways in, and opening the app again from Finder,
+  Spotlight or `open -a Fulcrum` while it runs summons the panel instead
+  of doing nothing. Hiding the panel hands focus straight back to the app
+  you came from. The SwiftUI scene layer is gone with it; the app menu
+  (About, Check for Updates, ⌘Q), the Edit menu (⌘V paste into the query
+  field, ⌘A, ⌘C) and the Window menu (⌘W/⌘M on the About and update
+  windows) are hand-built so the keyboard plumbing stays intact.
+
+- **One glass panel across all three platforms.** The launcher now reads
+  as the same product everywhere, each host rendered with its own native
+  material: Desktop Acrylic on Windows (the window is chromeless — the
+  content is the panel), vibrancy on macOS, and an alpha-glass GTK
+  stylesheet on Linux (KWin and other blurring compositors frost it;
+  without a compositor it degrades to solid). All three share the row
+  grammar the macOS panel already had: amber icon tiles, title over a
+  muted subtitle, badge chips, an inset rounded selection in the product
+  accent (#D97706) instead of system blue/default, and the ↵ affordance
+  chip on the selected row only. Windows rows previously showed a bare
+  title string and a permanent InfoBar strip; routine status now lives
+  quietly in the footer and the InfoBar appears only for things that
+  need attention. Linux gains a styled search entry, pointer hover, and
+  symbolic icon tiles with theme-checked fallbacks (a bare system never
+  paints the missing-icon box).
 
 ## [0.12.0] - 2026-10-16
 

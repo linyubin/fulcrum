@@ -23,7 +23,7 @@
 - **文件搜索** —— `find <query>` 走 Spotlight（当前为 macOS，其他平台诚实提示）
 - **BYOK AI（流式）** —— 自带 OpenAI / Anthropic / Ollama 密钥：`ai summarize`、`ai clean`、`ai translate <lang>`、`ai explain`、`ai chat <msg>`、`ai <question>`——答案在面板里流式生成，完成后自动进剪贴板；密钥只存本机、绝不参与同步
 - **系统命令** —— 锁屏、睡眠、重启
-- **插件** —— 任何能通过 stdio 说 JSON 的语言（[FPP1](docs/plugins.md)），附十一个第一方插件，可在启动器内直接安装（查询 `gallery`）
+- **插件** —— 任何能通过 stdio 说 JSON 的语言（[FPP1](docs/plugins.md)），附二十六个第一方插件，可在启动器内直接安装（查询 `gallery`）
 - **同步（beta）** —— 设置与片段镜像到任意云盘同步目录；机器数据被清空后可从镜像恢复
 
 搜索、历史、片段永远不离开你的设备。没有任何遥测。
@@ -61,7 +61,7 @@ fulcrum/
 
 ## 状态（开发者预览）
 
-开发者预览。后端已完成并通过全部测试（81 个 test case，覆盖排序、存储、插件、AI、签名更新链路），内置十一个第一方插件的 gallery（查询 `gallery` 安装）与设置/片段同步 beta（`sync-root`）。三个宿主均对齐后端契约：Windows（WinUI 3）、macOS（SwiftUI）、Linux（GTK4）——Linux 宿主通过 [Rivet 0.3](https://github.com/turinglambdaai/rivet) 引入的官方 `raco rivet build` Linux 路径构建。已知的平台边界在[用户指南](docs/user-guide.zh-CN.md#疑难排查)里如实列明：文件搜索仅限 macOS；Linux 的 Wayland 粘贴到前台需要 `wtype`。`raco rivet doctor` / `dev` 是所有平台受支持的开发循环。
+开发者预览。后端已完成并通过全部测试（81 个 test case，覆盖排序、存储、插件、AI、签名更新链路），内置二十六个第一方插件的 gallery（查询 `gallery` 安装）与设置/片段同步 beta（`sync-root`）。三个宿主均对齐后端契约：Windows（WinUI 3）、macOS（SwiftUI）、Linux（GTK4）——Linux 宿主通过 [Rivet 0.3](https://github.com/turinglambdaai/rivet) 引入的官方 `raco rivet build` Linux 路径构建。已知的平台边界在[用户指南](docs/user-guide.zh-CN.md#疑难排查)里如实列明：文件搜索仅限 macOS；Linux 的 Wayland 粘贴到前台需要 `wtype`。`raco rivet doctor` / `dev` 是所有平台受支持的开发循环。
 
 ## 开发
 

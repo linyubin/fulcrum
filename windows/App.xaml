@@ -7,6 +7,32 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- List selection reads as the product accent (#D97706 amber),
+                 not the system blue: the launcher rows are the app's face.
+                 Same alpha recipe as the macOS host's inset highlight. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver"
+                                     Color="#14D97706" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelected"
+                                     Color="#24D97706" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver"
+                                     Color="#2ED97706" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed"
+                                     Color="#38D97706" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver"
+                                     Color="#14D97706" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelected"
+                                     Color="#24D97706" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver"
+                                     Color="#2ED97706" />
+                    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed"
+                                     Color="#38D97706" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

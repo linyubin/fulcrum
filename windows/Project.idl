@@ -5,4 +5,10 @@ namespace RivetHost
     {
         MainWindow();
     }
+
+    [default_interface]
+    runtimeclass SettingsWindow : Microsoft.UI.Xaml.Window
+    {
+        SettingsWindow();
+    }
 }

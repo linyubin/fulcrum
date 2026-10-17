@@ -1,0 +1,28 @@
+{
+  "id": "ip",
+  "name": "IP Address",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Network",
+  "description": "Local IPv4 of the outbound interface, every interface address, hostname, and the public IP via api.ipify.org. Type `ip`.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "ip.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "show",
+      "name": "Show my IP addresses",
+      "keyword": "ip",
+      "description": "ip",
+      "example": "ip"
+    }
+  ],
+  "permissions": [
+    "network",
+    "clipboard-write"
+  ]
+}

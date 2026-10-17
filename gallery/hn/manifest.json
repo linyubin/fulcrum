@@ -1,0 +1,28 @@
+{
+  "id": "hn",
+  "name": "Hacker News",
+  "version": "1.0.0",
+  "author": "Fulcrum",
+  "category": "Web",
+  "description": "`hn` lists the front page, `hn rust async` searches stories; rows show points and comments, ↵ opens the story. Public Algolia API, no key.",
+  "icon": "plugin",
+  "entry": {
+    "exec": [
+      "python3",
+      "hn.py"
+    ]
+  },
+  "commands": [
+    {
+      "id": "search",
+      "name": "Browse Hacker News",
+      "keyword": "hn",
+      "description": "hn rust async",
+      "example": "hn rust async"
+    }
+  ],
+  "permissions": [
+    "network",
+    "open-url"
+  ]
+}

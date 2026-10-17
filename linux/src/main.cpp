@@ -69,6 +69,175 @@ ResultRow parse_row(std::vector<std::string> const& cells) {
   return row;
 }
 
+// ---- panel styling ----------------------------------------------------------
+//
+// One stylesheet drives the panel look — glass background, amber (#D97706)
+// rows, the ↵ chip on the selected row only — the same design tokens the
+// macOS host renders through vibrancy and the Windows host through Desktop
+// Acrylic. GNOME compositors do not blur, so the glass is an alpha
+// background: KWin and other blurring compositors upgrade it to frosted
+// glass for free, and a session without a compositor degrades to a solid
+// panel. Re-applied when the backend pushes the theme state, because the
+// dark variant picks its own glass tone.
+
+static GtkCssProvider* g_panel_css = nullptr;
+
+static void apply_panel_css() {
+  gboolean dark = FALSE;
+  if (GtkSettings* settings = gtk_settings_get_default()) {
+    g_object_get(settings, "gtk-application-prefer-dark-theme", &dark,
+                 nullptr);
+  }
+  char const* glass_css = dark
+      ? R"CSS(
+window.fulcrum-window {
+  background-color: rgba(28,28,30,0.88);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #f2f2f2;
+}
+)CSS"
+      : R"CSS(
+window.fulcrum-window {
+  background-color: rgba(250,250,249,0.92);
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.10);
+  color: #1d1d1f;
+}
+)CSS";
+  static char const* const shared_css = R"CSS(
+window.fulcrum-window entry {
+  background: none;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  font-size: 17px;
+  padding: 10px 4px;
+}
+window.fulcrum-window list {
+  padding: 2px 8px 8px;
+  background: none;
+}
+window.fulcrum-window list row {
+  border-radius: 8px;
+  margin: 1px 2px;
+  padding: 4px 8px;
+  background-color: transparent;
+}
+window.fulcrum-window list row:hover {
+  background-color: alpha(#D97706, 0.08);
+}
+window.fulcrum-window list row:selected {
+  background-color: alpha(#D97706, 0.16);
+}
+.fulcrum-row-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.fulcrum-row-subtitle {
+  font-size: 11px;
+}
+.fulcrum-row-icon {
+  background-color: alpha(#D97706, 0.14);
+  border-radius: 6px;
+  padding: 5px;
+  color: #D97706;
+}
+.fulcrum-badge {
+  background-color: alpha(#D97706, 0.16);
+  color: #D97706;
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.fulcrum-enter {
+  color: #D97706;
+  font-weight: 700;
+  opacity: 0;
+}
+list row:selected .fulcrum-enter {
+  opacity: 1;
+}
+)CSS";
+
+  GdkDisplay* display = gdk_display_get_default();
+  if (display == nullptr) {
+    return;
+  }
+  if (g_panel_css != nullptr) {
+    gtk_style_context_remove_provider_for_display(
+        display, GTK_STYLE_PROVIDER(g_panel_css));
+    g_object_unref(g_panel_css);
+    g_panel_css = nullptr;
+  }
+  g_panel_css = gtk_css_provider_new();
+  gtk_css_provider_load_from_string(g_panel_css,
+                                    (std::string(glass_css) + shared_css).c_str());
+  gtk_style_context_add_provider_for_display(
+      display, GTK_STYLE_PROVIDER(g_panel_css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+// Symbolic icon candidates per row kind, checked against the actual theme
+// so a bare system never paints the "missing icon" box.
+static char const* pick_icon(std::initializer_list<char const*> candidates) {
+  GtkIconTheme* theme =
+      gtk_icon_theme_get_for_display(gdk_display_get_default());
+  if (theme == nullptr) {
+    return nullptr;
+  }
+  for (char const* name : candidates) {
+    if (gtk_icon_theme_has_icon(theme, name)) {
+      return name;
+    }
+  }
+  return nullptr;
+}
+
+static char const* row_icon_name(ResultRow const& row) {
+  if (row.kind == "Calculator") {
+    return pick_icon({"accessories-calculator-symbolic"});
+  }
+  if (row.kind == "Clipboard") {
+    return pick_icon({"edit-paste-symbolic"});
+  }
+  if (row.kind == "Snippet") {
+    return pick_icon({"text-editor-symbolic"});
+  }
+  if (row.kind == "Quicklink") {
+    return pick_icon({"web-browser-symbolic", "link-symbolic"});
+  }
+  if (row.kind == "Web Search") {
+    return pick_icon({"web-browser-symbolic", "system-search-symbolic"});
+  }
+  if (row.kind == "Plugin") {
+    return pick_icon({"view-grid-symbolic", "system-run-symbolic"});
+  }
+  if (row.kind == "System") {
+    return row.id == "sys.lock"
+               ? pick_icon({"system-lock-screen-symbolic"})
+               : pick_icon({"preferences-system-symbolic",
+                            "emblem-system-symbolic"});
+  }
+  if (row.kind == "Setting") {
+    return pick_icon({"preferences-system-symbolic"});
+  }
+  if (row.kind == "Window") {
+    return pick_icon({"window-new-symbolic", "view-grid-symbolic"});
+  }
+  if (row.kind == "Update") {
+    return pick_icon({"document-save-symbolic", "go-down-symbolic"});
+  }
+  if (row.kind == "AI") {
+    return pick_icon({"starred-symbolic", "system-search-symbolic"});
+  }
+  if (row.kind == "File") {
+    return pick_icon({"folder-documents-symbolic"});
+  }
+  return pick_icon({"application-x-executable-symbolic"});
+}
+
 // Rivet's POSIX shutdown plumbing (defined after Launcher). Installed once
 // the embedded runtime has booted — see on_backend_ready for the ordering.
 void install_shutdown_hook_once();
@@ -76,6 +245,10 @@ void install_shutdown_hook_once();
 // Tray menu composition (defined after Launcher). Called when the backend
 // `language` setting lands so the labels follow it without a restart.
 void apply_tray_language();
+
+// Settings window (defined after Launcher): the tray menu and the leading
+// settings row open it.
+void show_settings_window();
 
 std::filesystem::path executable_path() {
   return std::filesystem::read_symlink("/proc/self/exe");
@@ -359,6 +532,7 @@ I18nEntry const kI18nFallback[] = {
     {"aboutWebsite", "访问官网", "Website"},
     {"aboutReportIssue", "问题反馈", "Report an Issue"},
     {"trayOpen", "打开 Fulcrum", "Open Fulcrum"},
+    {"traySettings", "设置…", "Settings…"},
     {"trayQuit", "退出 Fulcrum", "Quit Fulcrum"},
     {"trayFixHotkey", "修复 Alt+Space 冲突", "Fix Alt+Space conflict"},
     {"hotkeyShadowed",
@@ -687,6 +861,7 @@ struct Launcher {
 
   // The theme setting is backend-owned; GTK can only ask for the dark
   // variant explicitly — light/system fall back to the user's GTK theme.
+  // The panel stylesheet rides along: the dark glass is its own tone.
   static void apply_theme(std::string const& theme) {
     GtkSettings* settings = gtk_settings_get_default();
     if (settings == nullptr) {
@@ -694,6 +869,7 @@ struct Launcher {
     }
     g_object_set(settings, "gtk-application-prefer-dark-theme",
                  theme == "dark" ? TRUE : FALSE, nullptr);
+    apply_panel_css();
   }
 
   void apply_ai_stream(rivet_app::AiStream const& stream) {
@@ -1096,23 +1272,48 @@ struct Launcher {
       child = next;
     }
     for (auto const& row : rows) {
-      auto* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-      gtk_widget_set_margin_top(box, 6);
-      gtk_widget_set_margin_bottom(box, 6);
-      gtk_widget_set_margin_start(box, 10);
-      gtk_widget_set_margin_end(box, 10);
+      // Row grammar matches the macOS/Windows hosts: amber icon tile,
+      // title over muted subtitle, badge chip, and the ↵ chip that the
+      // stylesheet shows only on the selected row.
+      auto* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+      gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
+
+      if (char const* icon_name = row_icon_name(row)) {
+        auto* icon = gtk_image_new_from_icon_name(icon_name);
+        gtk_image_set_pixel_size(GTK_IMAGE(icon), 16);
+        gtk_widget_add_css_class(icon, "fulcrum-row-icon");
+        gtk_box_append(GTK_BOX(box), icon);
+      }
+
+      auto* texts = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+      gtk_widget_set_valign(texts, GTK_ALIGN_CENTER);
+      gtk_widget_set_hexpand(texts, TRUE);
       auto* title = gtk_label_new(row.title.c_str());
       gtk_label_set_xalign(GTK_LABEL(title), 0.0);
       gtk_label_set_ellipsize(GTK_LABEL(title), PANGO_ELLIPSIZE_END);
-      gtk_widget_add_css_class(title, "heading");
+      gtk_widget_add_css_class(title, "fulcrum-row-title");
       auto* subtitle = gtk_label_new(
           row.subtitle.empty() ? row.kind.c_str() : row.subtitle.c_str());
       gtk_label_set_xalign(GTK_LABEL(subtitle), 0.0);
       gtk_label_set_ellipsize(GTK_LABEL(subtitle), PANGO_ELLIPSIZE_END);
-      gtk_widget_add_css_class(subtitle, "caption");
+      gtk_widget_add_css_class(subtitle, "fulcrum-row-subtitle");
       gtk_widget_add_css_class(subtitle, "dim-label");
-      gtk_box_append(GTK_BOX(box), title);
-      gtk_box_append(GTK_BOX(box), subtitle);
+      gtk_box_append(GTK_BOX(texts), title);
+      gtk_box_append(GTK_BOX(texts), subtitle);
+      gtk_box_append(GTK_BOX(box), texts);
+
+      if (!row.badge.empty()) {
+        auto* badge = gtk_label_new(row.badge.c_str());
+        gtk_widget_add_css_class(badge, "fulcrum-badge");
+        gtk_widget_set_valign(badge, GTK_ALIGN_CENTER);
+        gtk_box_append(GTK_BOX(box), badge);
+      }
+
+      auto* enter = gtk_label_new("\u21B5");
+      gtk_widget_add_css_class(enter, "fulcrum-enter");
+      gtk_widget_set_valign(enter, GTK_ALIGN_CENTER);
+      gtk_box_append(GTK_BOX(box), enter);
+
       gtk_list_box_append(results, box);
     }
     if (!rows.empty()) {
@@ -1212,6 +1413,12 @@ struct Launcher {
           // widgets here).
           if (job->action_id == "about.open") {
             show_about_dialog(Launcher::instance().window);
+            return G_SOURCE_REMOVE;
+          }
+          // The settings window rides "delegated" the same way.
+          if (job->action_id == "settings.open") {
+            Launcher::instance().hide();
+            show_settings_window();
             return G_SOURCE_REMOVE;
           }
           // Window commands ride "delegated": the backend ranks the rows,
@@ -1438,6 +1645,464 @@ struct Launcher {
   std::unique_ptr<rivet::linux_runtime::Backend> backend_;
 };
 
+// ---- settings window ---------------------------------------------------------
+//
+// A form over the backend settings store — the discoverable twin of the
+// `settings` query rows, reached from the tray menu and the leading
+// settings row. Every control carries its backend key; edits go through
+// settings-set as they happen, the backend validates (hotkey grammar,
+// ranges, provider names), a refusal shows inline and the form reloads the
+// backend's truth. The AI key rides the ai.key action and never comes back
+// over the wire; ai-status reports readiness instead. One window, hidden on
+// close and reloaded on every show.
+
+enum class SettingKind { toggle, choice, number, text };
+
+struct SettingBinding {
+  std::string key;
+  SettingKind kind{SettingKind::text};
+  std::vector<std::string> choices;  // choice: drop-down index → value
+  GtkWidget* widget{nullptr};
+};
+
+struct SettingsForm {
+  GtkWindow* window{nullptr};
+  std::vector<std::unique_ptr<SettingBinding>> bindings;
+  GtkLabel* ai_status{nullptr};
+  GtkLabel* key_notice{nullptr};
+  GtkWidget* key_entry{nullptr};
+  GtkLabel* error{nullptr};
+  std::map<std::string, std::string> values;
+  // True while apply pushes values into the controls, so their change
+  // handlers do not write them straight back.
+  bool loading{false};
+};
+
+SettingsForm* g_settings_form = nullptr;
+
+void settings_load();
+
+void settings_show_error(std::string const& message) {
+  if (g_settings_form == nullptr) return;
+  gtk_label_set_text(g_settings_form->error, message.c_str());
+  gtk_widget_set_visible(GTK_WIDGET(g_settings_form->error), !message.empty());
+}
+
+void settings_refresh_ai_status() {
+  auto* api_raw = Launcher::instance().api.get();
+  if (api_raw == nullptr) return;
+  std::thread([api_raw]() {
+    std::string status;
+    try {
+      status = api_raw->ai_status().get();
+    } catch (...) {
+    }
+    g_idle_add([](gpointer user_data) -> int {
+      std::unique_ptr<std::string> text(static_cast<std::string*>(user_data));
+      if (g_settings_form != nullptr) {
+        gtk_label_set_text(g_settings_form->ai_status,
+                           *text == "ready" ? "Ready" : text->c_str());
+      }
+      return G_SOURCE_REMOVE;
+    }, new std::string(std::move(status)));
+  }).detach();
+}
+
+void settings_write(std::string const& key, std::string const& value) {
+  auto* api_raw = Launcher::instance().api.get();
+  if (api_raw == nullptr || g_settings_form == nullptr || key.empty()) return;
+  g_settings_form->values[key] = value;
+  std::thread([api_raw, key, value]() {
+    std::string error;
+    try {
+      api_raw->settings_set(key, value).get();
+    } catch (std::exception const& e) {
+      error = e.what();
+    } catch (...) {
+      error = "settings-set failed";
+    }
+    g_idle_add([](gpointer user_data) -> int {
+      std::unique_ptr<std::pair<std::string, std::string>> result(
+          static_cast<std::pair<std::string, std::string>*>(user_data));
+      auto const& [written_key, written_error] = *result;
+      if (g_settings_form == nullptr) return G_SOURCE_REMOVE;
+      if (written_error.empty()) {
+        settings_show_error("");
+        if (written_key == "ai-provider") {
+          settings_refresh_ai_status();
+        } else if (written_key == "language") {
+          set_i18n_language(g_settings_form->values[written_key]);
+          apply_tray_language();
+        }
+      } else {
+        // The backend refused the value (grammar, range): say so and fall
+        // back to what it actually holds.
+        settings_show_error(written_key + ": " + written_error);
+        settings_load();
+      }
+      return G_SOURCE_REMOVE;
+    }, new std::pair<std::string, std::string>(key, std::move(error)));
+  }).detach();
+}
+
+std::string settings_trimmed(std::string value) {
+  auto const begin = value.find_first_not_of(" \t\r\n");
+  if (begin == std::string::npos) return {};
+  auto const end = value.find_last_not_of(" \t\r\n");
+  return value.substr(begin, end - begin + 1);
+}
+
+void settings_commit_entry(SettingBinding* binding) {
+  if (g_settings_form == nullptr || g_settings_form->loading) return;
+  std::string const value = settings_trimmed(
+      gtk_editable_get_text(GTK_EDITABLE(binding->widget)));
+  auto const it = g_settings_form->values.find(binding->key);
+  if (it != g_settings_form->values.end() && it->second == value) return;
+  settings_write(binding->key, value);
+}
+
+void on_setting_switch(GObject* object, GParamSpec*, gpointer user_data) {
+  if (g_settings_form == nullptr || g_settings_form->loading) return;
+  auto* binding = static_cast<SettingBinding*>(user_data);
+  settings_write(binding->key,
+                 gtk_switch_get_active(GTK_SWITCH(object)) ? "on" : "off");
+}
+
+void on_setting_choice(GObject* object, GParamSpec*, gpointer user_data) {
+  if (g_settings_form == nullptr || g_settings_form->loading) return;
+  auto* binding = static_cast<SettingBinding*>(user_data);
+  guint const index = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+  if (index == GTK_INVALID_LIST_POSITION || index >= binding->choices.size()) return;
+  settings_write(binding->key, binding->choices[index]);
+}
+
+void on_setting_number(GtkSpinButton* spin, gpointer user_data) {
+  if (g_settings_form == nullptr || g_settings_form->loading) return;
+  auto* binding = static_cast<SettingBinding*>(user_data);
+  settings_write(binding->key,
+                 std::to_string(gtk_spin_button_get_value_as_int(spin)));
+}
+
+void on_setting_entry_activate(GtkEntry*, gpointer user_data) {
+  settings_commit_entry(static_cast<SettingBinding*>(user_data));
+}
+
+void on_setting_entry_leave(GtkEventControllerFocus*, gpointer user_data) {
+  settings_commit_entry(static_cast<SettingBinding*>(user_data));
+}
+
+void settings_save_key() {
+  if (g_settings_form == nullptr) return;
+  auto* api_raw = Launcher::instance().api.get();
+  if (api_raw == nullptr) return;
+  std::string const key = settings_trimmed(
+      gtk_editable_get_text(GTK_EDITABLE(g_settings_form->key_entry)));
+  if (key.empty()) return;
+  std::thread([api_raw, key]() {
+    std::string status;
+    try {
+      status = api_raw->run_action("ai.key", key).get();
+    } catch (std::exception const& e) {
+      status = e.what();
+    } catch (...) {
+      status = "ai.key failed";
+    }
+    g_idle_add([](gpointer user_data) -> int {
+      std::unique_ptr<std::string> text(static_cast<std::string*>(user_data));
+      if (g_settings_form != nullptr) {
+        gtk_label_set_text(
+            g_settings_form->key_notice,
+            *text == "ok" ? "Key saved — stored on this machine only, never synced."
+                          : text->c_str());
+        gtk_editable_set_text(GTK_EDITABLE(g_settings_form->key_entry), "");
+        settings_refresh_ai_status();
+      }
+      return G_SOURCE_REMOVE;
+    }, new std::string(std::move(status)));
+  }).detach();
+}
+
+void on_save_key_clicked(GtkButton*, gpointer) { settings_save_key(); }
+void on_key_entry_activate(GtkPasswordEntry*, gpointer) { settings_save_key(); }
+
+// ---- form construction
+
+GtkWidget* settings_row(GtkWidget* section, char const* label_text,
+                        GtkWidget* control) {
+  auto* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_widget_set_margin_top(row, 8);
+  gtk_widget_set_margin_bottom(row, 8);
+  gtk_widget_set_margin_start(row, 14);
+  gtk_widget_set_margin_end(row, 14);
+  auto* label = gtk_label_new(label_text);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_widget_set_hexpand(label, TRUE);
+  gtk_widget_set_halign(control, GTK_ALIGN_END);
+  gtk_widget_set_valign(control, GTK_ALIGN_CENTER);
+  gtk_box_append(GTK_BOX(row), label);
+  gtk_box_append(GTK_BOX(row), control);
+  gtk_box_append(GTK_BOX(section), row);
+  return row;
+}
+
+void settings_hint(GtkWidget* section, char const* text) {
+  auto* label = gtk_label_new(text);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_widget_add_css_class(label, "caption");
+  gtk_widget_add_css_class(label, "dim-label");
+  gtk_widget_set_margin_start(label, 14);
+  gtk_widget_set_margin_end(label, 14);
+  gtk_widget_set_margin_bottom(label, 8);
+  gtk_box_append(GTK_BOX(section), label);
+}
+
+GtkWidget* settings_section(GtkWidget* page, char const* title) {
+  auto* heading = gtk_label_new(title);
+  gtk_label_set_xalign(GTK_LABEL(heading), 0.0);
+  gtk_widget_add_css_class(heading, "heading");
+  gtk_widget_set_margin_top(heading, 14);
+  gtk_box_append(GTK_BOX(page), heading);
+  auto* frame = gtk_frame_new(nullptr);
+  auto* body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_frame_set_child(GTK_FRAME(frame), body);
+  gtk_box_append(GTK_BOX(page), frame);
+  return body;
+}
+
+SettingBinding* settings_bind(std::string key, SettingKind kind,
+                              GtkWidget* widget,
+                              std::vector<std::string> choices = {}) {
+  auto binding = std::make_unique<SettingBinding>();
+  binding->key = std::move(key);
+  binding->kind = kind;
+  binding->widget = widget;
+  binding->choices = std::move(choices);
+  auto* raw = binding.get();
+  g_settings_form->bindings.push_back(std::move(binding));
+  return raw;
+}
+
+void settings_add_toggle(GtkWidget* section, char const* label, char const* key) {
+  auto* toggle = gtk_switch_new();
+  auto* binding = settings_bind(key, SettingKind::toggle, toggle);
+  g_signal_connect(toggle, "notify::active", G_CALLBACK(on_setting_switch), binding);
+  settings_row(section, label, toggle);
+}
+
+void settings_add_choice(GtkWidget* section, char const* label, char const* key,
+                         std::vector<std::pair<char const*, char const*>> const& options) {
+  std::vector<char const*> labels;
+  std::vector<std::string> values;
+  for (auto const& [text, value] : options) {
+    labels.push_back(text);
+    values.push_back(value);
+  }
+  labels.push_back(nullptr);
+  auto* drop = gtk_drop_down_new_from_strings(labels.data());
+  auto* binding = settings_bind(key, SettingKind::choice, drop, std::move(values));
+  g_signal_connect(drop, "notify::selected", G_CALLBACK(on_setting_choice), binding);
+  settings_row(section, label, drop);
+}
+
+void settings_add_number(GtkWidget* section, char const* label, char const* key,
+                         double min, double max) {
+  auto* spin = gtk_spin_button_new_with_range(min, max, 1);
+  auto* binding = settings_bind(key, SettingKind::number, spin);
+  g_signal_connect(spin, "value-changed", G_CALLBACK(on_setting_number), binding);
+  settings_row(section, label, spin);
+}
+
+void settings_add_text(GtkWidget* section, char const* label, char const* key,
+                       char const* placeholder) {
+  auto* entry = gtk_entry_new();
+  gtk_entry_set_placeholder_text(GTK_ENTRY(entry), placeholder);
+  gtk_widget_set_size_request(entry, 260, -1);
+  auto* binding = settings_bind(key, SettingKind::text, entry);
+  g_signal_connect(entry, "activate", G_CALLBACK(on_setting_entry_activate), binding);
+  auto* focus = gtk_event_controller_focus_new();
+  g_signal_connect(focus, "leave", G_CALLBACK(on_setting_entry_leave), binding);
+  gtk_widget_add_controller(entry, focus);
+  settings_row(section, label, entry);
+}
+
+void settings_build() {
+  g_settings_form = new SettingsForm();
+  auto* window = gtk_window_new();
+  g_settings_form->window = GTK_WINDOW(window);
+  gtk_window_set_title(GTK_WINDOW(window), "Fulcrum Settings");
+  gtk_window_set_default_size(GTK_WINDOW(window), 660, 760);
+  gtk_window_set_hide_on_close(GTK_WINDOW(window), TRUE);
+
+  auto* scrolled = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  auto* page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  gtk_widget_set_margin_top(page, 8);
+  gtk_widget_set_margin_bottom(page, 24);
+  gtk_widget_set_margin_start(page, 28);
+  gtk_widget_set_margin_end(page, 28);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), page);
+  gtk_window_set_child(GTK_WINDOW(window), scrolled);
+
+  auto* general = settings_section(page, "General");
+  settings_add_choice(general, "Language", "language",
+                      {{"中文", "zh"}, {"English", "en"}});
+  settings_add_choice(general, "Theme", "theme",
+                      {{"System", "system"}, {"Light", "light"}, {"Dark", "dark"}});
+  settings_add_text(general, "Hotkey", "hotkey", "alt+space");
+  settings_hint(general,
+                "Modifiers alt / ctrl / shift / super plus a key: space, a–z, 0–9, "
+                "f1–f12, comma, period, minus, equal, tab. Applies immediately; "
+                "a taken combo falls back to Ctrl+Alt+Space.");
+  settings_add_number(general, "Maximum results", "max-results", 5, 25);
+
+  auto* features = settings_section(page, "Features");
+  settings_add_toggle(features, "Record clipboard history", "clipboard-enabled");
+  settings_add_number(features, "Clipboard history limit", "clipboard-limit", 10, 100000);
+  settings_add_toggle(features, "Web search rows (bangs and fallback)", "web-search-enabled");
+  settings_add_choice(features, "Default bang", "default-engine",
+                      {{"!g", "!g"}, {"!d", "!d"}, {"!gh", "!gh"}, {"!so", "!so"},
+                       {"!w", "!w"}, {"!yt", "!yt"}, {"!m", "!m"}, {"!t", "!t"}});
+  settings_add_toggle(features, "Load plugins", "plugins-enabled");
+  settings_add_number(features, "Plugin call timeout (ms)", "plugins-timeout-ms", 100, 10000);
+
+  auto* ai = settings_section(page, "AI");
+  settings_add_choice(ai, "Provider", "ai-provider",
+                      {{"Off", ""}, {"OpenAI", "openai"},
+                       {"Anthropic", "anthropic"}, {"Ollama", "ollama"}});
+  settings_add_text(ai, "Model", "ai-model", "provider default");
+  settings_add_text(ai, "Base URL", "ai-base-url", "provider default");
+  settings_add_text(ai, "Persona", "ai-persona", "prepended to every request");
+  auto* key_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  auto* key_entry = gtk_password_entry_new();
+  gtk_password_entry_set_show_peek_icon(GTK_PASSWORD_ENTRY(key_entry), TRUE);
+  gtk_widget_set_size_request(key_entry, 240, -1);
+  g_signal_connect(key_entry, "activate", G_CALLBACK(on_key_entry_activate), nullptr);
+  auto* save = gtk_button_new_with_label("Save");
+  g_signal_connect(save, "clicked", G_CALLBACK(on_save_key_clicked), nullptr);
+  gtk_box_append(GTK_BOX(key_box), key_entry);
+  gtk_box_append(GTK_BOX(key_box), save);
+  g_settings_form->key_entry = key_entry;
+  settings_row(ai, "API key", key_box);
+  auto* status = gtk_label_new("");
+  gtk_label_set_xalign(GTK_LABEL(status), 0.0);
+  gtk_widget_add_css_class(status, "dim-label");
+  gtk_widget_set_margin_start(status, 14);
+  gtk_widget_set_margin_end(status, 14);
+  gtk_box_append(GTK_BOX(ai), status);
+  g_settings_form->ai_status = GTK_LABEL(status);
+  auto* notice = gtk_label_new("");
+  gtk_label_set_xalign(GTK_LABEL(notice), 0.0);
+  gtk_label_set_wrap(GTK_LABEL(notice), TRUE);
+  gtk_widget_add_css_class(notice, "caption");
+  gtk_widget_add_css_class(notice, "dim-label");
+  gtk_widget_set_margin_start(notice, 14);
+  gtk_widget_set_margin_end(notice, 14);
+  gtk_box_append(GTK_BOX(ai), notice);
+  g_settings_form->key_notice = GTK_LABEL(notice);
+  settings_hint(ai, "Stored in ai-keys.json on this machine; never mirrored to the sync folder.");
+
+  auto* sync = settings_section(page, "Sync & Updates");
+  settings_add_text(sync, "Sync folder (beta)", "sync-root", "empty = off");
+  settings_hint(sync,
+                "A folder a file sync service replicates (Syncthing, Nextcloud, "
+                "Dropbox); settings and snippets mirror there.");
+  settings_add_text(sync, "Update feed base URL", "update-base-url", "https://…");
+
+  auto* error = gtk_label_new("");
+  gtk_label_set_xalign(GTK_LABEL(error), 0.0);
+  gtk_label_set_wrap(GTK_LABEL(error), TRUE);
+  gtk_label_set_selectable(GTK_LABEL(error), TRUE);
+  gtk_widget_add_css_class(error, "error");
+  gtk_widget_set_margin_top(error, 12);
+  gtk_widget_set_visible(error, FALSE);
+  gtk_box_append(GTK_BOX(page), error);
+  g_settings_form->error = GTK_LABEL(error);
+}
+
+void settings_apply(std::map<std::string, std::string> values, std::string ai_status) {
+  if (g_settings_form == nullptr) return;
+  g_settings_form->values = std::move(values);
+  g_settings_form->loading = true;
+  for (auto const& binding : g_settings_form->bindings) {
+    auto const it = g_settings_form->values.find(binding->key);
+    std::string const value = it == g_settings_form->values.end() ? "" : it->second;
+    switch (binding->kind) {
+      case SettingKind::toggle:
+        gtk_switch_set_active(GTK_SWITCH(binding->widget), value == "on");
+        break;
+      case SettingKind::choice: {
+        guint selected = GTK_INVALID_LIST_POSITION;
+        for (std::size_t i = 0; i < binding->choices.size(); ++i) {
+          if (binding->choices[i] == value) {
+            selected = static_cast<guint>(i);
+            break;
+          }
+        }
+        gtk_drop_down_set_selected(GTK_DROP_DOWN(binding->widget), selected);
+        break;
+      }
+      case SettingKind::number: {
+        double number = 0;
+        try {
+          number = std::stod(value);
+        } catch (...) {
+        }
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(binding->widget), number);
+        break;
+      }
+      case SettingKind::text:
+        gtk_editable_set_text(GTK_EDITABLE(binding->widget), value.c_str());
+        break;
+    }
+  }
+  gtk_label_set_text(g_settings_form->ai_status,
+                     ai_status == "ready" ? "Ready" : ai_status.c_str());
+  g_settings_form->loading = false;
+}
+
+void settings_load() {
+  auto* api_raw = Launcher::instance().api.get();
+  if (api_raw == nullptr || g_settings_form == nullptr) return;
+  std::thread([api_raw]() {
+    auto* payload = new std::pair<std::map<std::string, std::string>, std::string>();
+    try {
+      // settings-list rows: (key value description …); booleans read on/off.
+      for (auto const& row : api_raw->settings_list().get()) {
+        if (row.size() >= 2) {
+          payload->first[row[0]] = row[1];
+        }
+      }
+    } catch (...) {
+    }
+    try {
+      payload->second = api_raw->ai_status().get();
+    } catch (...) {
+    }
+    g_idle_add([](gpointer user_data) -> int {
+      std::unique_ptr<std::pair<std::map<std::string, std::string>, std::string>>
+          loaded(static_cast<std::pair<std::map<std::string, std::string>,
+                                       std::string>*>(user_data));
+      settings_apply(std::move(loaded->first), std::move(loaded->second));
+      return G_SOURCE_REMOVE;
+    }, payload);
+  }).detach();
+}
+
+void show_settings_window() {
+  if (Launcher::instance().api == nullptr) {
+    Launcher::instance().set_status("Settings open once the backend is ready…");
+    return;
+  }
+  if (g_settings_form == nullptr) {
+    settings_build();
+  }
+  settings_load();
+  gtk_window_present(g_settings_form->window);
+}
+
 // ---- X11 global hotkey ----------------------------------------------------
 
 std::string install_x11_hotkey(GdkDisplay* display) {
@@ -1537,6 +2202,8 @@ std::vector<rivet::system::TrayMenuItem> tray_menu_items() {
   std::vector<rivet::system::TrayMenuItem> items;
   items.push_back(rivet::system::TrayMenuItem(
       tr("trayOpen"), [] { Launcher::instance().show(); }));
+  items.push_back(rivet::system::TrayMenuItem(
+      tr("traySettings"), [] { show_settings_window(); }));
   if (Launcher::instance().hotkey_shadowed) {
     items.push_back(rivet::system::TrayMenuItem(
         tr("trayFixHotkey"), [] { tray_fix_hotkey(); }));
@@ -1759,6 +2426,10 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_window_set_title(launcher.window, "Fulcrum");
   gtk_window_set_default_size(launcher.window, 680, 440);
   gtk_window_set_resizable(launcher.window, FALSE);
+  // Chromeless like the other hosts: the panel content IS the window, and
+  // the stylesheet rounds it. Close still hides (below) via Esc / the tray.
+  gtk_window_set_decorated(launcher.window, FALSE);
+  apply_panel_css();
   // The WM's close button HIDES, exactly like the other hosts: the
   // process stays resident (hotkey / --toggle / tray summon it back).
   // A close that quits would strand the user with no way to summon.

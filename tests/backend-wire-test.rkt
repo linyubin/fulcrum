@@ -273,6 +273,55 @@
 (check! "no download row before a candidate"
         (member "update.download" update-ids) #f)
 
+;; ---- settings surface behind the native settings windows -----------------
+;; settings-list speaks on/off for booleans (hosts compare against "off"),
+;; settings-set takes the same words back, the leading settings row opens
+;; the host window by delegation, and ai-status reports readiness without
+;; ever carrying the key across the wire.
+(define (setting-value rows key)
+  (for/first ([row (in-list rows)] #:when (string=? (list-ref row 0) key))
+    (list-ref row 1)))
+(define-values (sl2 sl2e _sl2ev) (call-rpc 50 (list "settings-list")))
+(check! "settings-list no error (2)" sl2e #f)
+(check! "settings-list booleans read on/off"
+        (setting-value sl2 "expansion-enabled") "on")
+(define-values (ssv sse _ssev)
+  (call-rpc 51 (list "settings-set" "expansion-enabled" "off")))
+(check! "settings-set accepts off" sse #f)
+(check! "settings-set returns true" ssv #t)
+(define-values (sl3 _sl3e _sl3ev) (call-rpc 52 (list "settings-list")))
+(check! "settings-set off round-trips through settings-list"
+        (setting-value sl3 "expansion-enabled") "off")
+(call-rpc 53 (list "settings-set" "expansion-enabled" "on"))
+(define-values (sov _soe _soev) (call-rpc 54 (list "run-action" "settings.open" "")))
+(check! "settings.open delegates to the host" sov "delegated")
+(define-values (erows _ere _erev) (call-rpc 55 (list "search" "")))
+(check! "empty query offers the settings window row"
+        (and (for/or ([row (in-list erows)])
+               (string=? (list-ref row 0) "settings.open"))
+             #t)
+        #t)
+;; The row contract is positional: a column too many silently drops the
+;; row on hosts that check the width (the quick settings rows once had 9).
+(check! "every empty-query row has exactly 8 cells"
+        (for/and ([row (in-list erows)]) (= (length row) 8)) #t)
+(define-values (srows _sre _srev) (call-rpc 56 (list "search" "settings")))
+(check! "settings query leads with the window row"
+        (and (pair? srows) (string=? (list-ref (car srows) 0) "settings.open")) #t)
+(check! "every settings-query row has exactly 8 cells"
+        (for/and ([row (in-list srows)]) (= (length row) 8)) #t)
+(define-values (as1 ase _asev) (call-rpc 57 (list "ai-status")))
+(check! "ai-status no error" ase #f)
+(check! "ai-status without a provider" as1 "no provider configured")
+(call-rpc 58 (list "settings-set" "ai-provider" "openai"))
+(define-values (as2 _as2e _as2ev) (call-rpc 59 (list "ai-status")))
+(check! "ai-status without a key" as2 "no API key for openai")
+(define-values (aksv _aksve _aksvev) (call-rpc 60 (list "run-action" "ai.key" "sk-test-key")))
+(check! "ai.key saves the key" aksv "ok")
+(define-values (as3 _as3e _as3ev) (call-rpc 61 (list "ai-status")))
+(check! "ai-status ready once a key exists" as3 "ready")
+(call-rpc 62 (list "settings-set" "ai-provider" ""))
+
 ;; error paths: unknown RPC, unknown action, bad arity
 (define-values (_xv xe _xeve) (call-rpc 20 (list "no-such-rpc" "x")))
 (printf "DBG20 xe=~s\n" xe)

@@ -105,10 +105,13 @@ struct MainWindow : MainWindowT<MainWindow> {
   void HideLauncher();
   void MoveSelection(int delta);
   void ApplyResults(std::vector<rivet_app::ResultRow> rows);
+  // The ↵ chip on each row is visible only while that row is selected;
+  // the chips are stored parallel to rows_.
+  void UpdateEnterChips();
   void SetStatusOk(std::wstring const& message);
   void SetStatusError(std::wstring const& message);
   // The last status-line message, for the right-click "Copy message"
-  // affordance on the status bar (errors must be copyable).
+  // affordance on the status surfaces (errors must be copyable).
   void AttachStatusBarCopyAffordance();
   std::wstring last_status_;
   // Snippet auto-expansion (WH_KEYBOARD_LL): types the snippet text when
@@ -123,10 +126,17 @@ struct MainWindow : MainWindowT<MainWindow> {
   // About panel (tray menu + the `about` launcher row): one ContentDialog
   // with version, tagline, license and the site/issue links.
   winrt::fire_and_forget ShowAbout();
+  // Settings window (tray menu + the `settings` launcher row): one
+  // instance, reloaded on every show so launcher-row edits are reflected.
+  void ShowSettings();
+  winrt::RivetHost::SettingsWindow settings_window_{nullptr};
 
   std::shared_ptr<rivet::windows::Backend> backend_;
   std::unique_ptr<rivet_app::API> api_;
   std::vector<rivet_app::ResultRow> rows_;
+  // Per-row ↵ affordance chips, parallel to rows_ (strong refs; the list
+  // owns the visual tree so these stay alive with it).
+  std::vector<winrt::Microsoft::UI::Xaml::Controls::Border> enter_chips_;
   std::atomic<std::uint64_t> search_generation_{0};
   std::uint64_t hotkey_atom_{0};
   std::atomic<bool> clipboard_listener_installed_{false};

@@ -17,7 +17,7 @@ tested reference plugin.
 
 ## The first-party gallery
 
-Fulcrum ships eleven first-party plugins built into the app — query
+Fulcrum ships twenty-six first-party plugins built into the app — query
 `gallery` or `plugins` in the launcher to list them; select a row to
 install, select an installed row to uninstall. Fuzzy queries also suggest
 installs (type `docker` and the install row appears next to your apps).
@@ -36,6 +36,21 @@ Installed plugins are queryable immediately, no restart.
 | winget | `winget` | Windows |
 | Bitwarden | `bw` | the `bw` CLI, unlocked (`BW_SESSION`) |
 | Currency | `cur` | network (keyless daily rates) |
+| Hash | `hash` | — |
+| Base64 | `b64` | — |
+| UUID | `uuid` | — |
+| Password Generator | `pw` | — |
+| Lorem Ipsum | `lorem` | — |
+| Color | `color` | — |
+| Case Converter | `case` | — |
+| Number Base | `base` | — |
+| Word Count | `wc` | a clipboard tool for the bare `wc` (pbpaste / wl-paste / xclip / PowerShell) |
+| IP Address | `ip` | network for the public IP (api.ipify.org) |
+| Hacker News | `hn` | network (Algolia HN API, keyless) |
+| Dictionary | `define` | network (dictionaryapi.dev, keyless) |
+| npm Search | `npm` | network (registry.npmjs.org) |
+| Weather | `wx` | network (wttr.in; the slowest feed — raise `plugins-timeout-ms` if it times out) |
+| Wikipedia | `wiki` | network (MediaWiki API) |
 
 Every plugin is also a second reference implementation — read
 [`gallery/unit/unit.py`](../gallery/unit/unit.py) for the graceful

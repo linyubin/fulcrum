@@ -5,18 +5,23 @@ import RivetEmbedding
 import RivetRuntime
 import RivetSystem
 
+// Launcher with no SwiftUI scenes: the panel, the About and the update
+// windows are AppKit windows owned by the delegate. A Settings scene used to
+// carry the About panel, but on current macOS every SwiftUI window scene
+// presents its window at launch — users saw a stray "Fulcrum Settings"
+// window behind the launcher on every start. Accessory activation: no Dock
+// icon; the menu bar glyph and the hotkey are the ways in, the launcher
+// convention.
 @main
-struct FulcrumApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var model = LauncherModel()
-
-    var body: some Scene {
-        Settings {
-            // The Settings scene is the About panel: version, website,
-            // feedback and license — the launcher has no other chrome to
-            // hang an About menu on.
-            AboutPanelView()
-        }
+enum FulcrumApp {
+    @MainActor
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        AppDelegate.shared = delegate  // NSApplication.delegate is not retained
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.run()
     }
 }
 
@@ -87,8 +92,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Update flow (updater 0.2): panel window + RPC orchestration.
     private var updateController: UpdateController?
     private var updateWindow: NSWindow?
-    // About panel (Settings scene + menu bar + the `about` launcher row).
+    // About panel (menu bar + app menu + the `about` launcher row).
     private var aboutWindow: NSWindow?
+    // Settings window (app menu ⌘, + the `settings` launcher row).
+    private var settingsWindow: NSWindow?
+    private var settingsModel: SettingsModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One instance owns the global hotkey; second launches exit here via
@@ -115,12 +123,97 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyHotkey("alt+space")
         installKeyMonitor()
         installMenuBar(model: launcherModel)
+        installMenus()
         installClipboardWatcher(model: launcherModel)
         launcherModel.start()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         true
+    }
+
+    /// Opening the app while it is already running (Finder, Spotlight,
+    /// `open -a Fulcrum`) summons the panel — the launcher convention, and
+    /// the way in for someone who has forgotten both the hotkey and the
+    /// menu bar glyph. There is no Dock icon to click.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        showPanel()
+        return false
+    }
+
+    // MARK: main menu
+
+    /// Pure AppKit bootstrap means no default menus. This restores the
+    /// keyboard plumbing the SwiftUI scene layer used to provide for free:
+    /// ⌘Q, the Edit six for the query field (⌘V paste, ⌘A select all) and
+    /// the selectable status text, ⌘W/⌘M on the About and update windows.
+    /// Accessory app: the menus show only while one of its windows is key.
+    private func installMenus() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "About Fulcrum",
+                        action: #selector(showAboutFromMenu(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Settings…",
+                        action: #selector(showSettingsFromMenu(_:)),
+                        keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Check for Updates…",
+                        action: #selector(checkForUpdatesFromMenu(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Fulcrum",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo",
+                         action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo",
+                         action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut",
+                         action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy",
+                         action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste",
+                         action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All",
+                         action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        let windowItem = NSMenuItem()
+        mainMenu.addItem(windowItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Close",
+                           action: #selector(NSWindow.performClose(_:)),
+                           keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize",
+                           action: #selector(NSWindow.performMiniaturize(_:)),
+                           keyEquivalent: "m")
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func showAboutFromMenu(_ sender: Any?) {
+        showAboutPanel()
+    }
+
+    @objc private func showSettingsFromMenu(_ sender: Any?) {
+        showSettingsWindow()
+    }
+
+    @objc private func checkForUpdatesFromMenu(_ sender: Any?) {
+        updateController?.checkForUpdates()
+        showUpdatePanel()
     }
 
     // MARK: backend readiness
@@ -142,7 +235,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 if let rows = try? await api.settingsList(),
                    let language = rows.first(where: { $0.id == "language" }) {
-                    I18nService.shared.setLanguage(language.badge)
+                    // settings-list puts the value in the title column.
+                    I18nService.shared.setLanguage(language.title)
                 }
             }
             self?.updateController?.silentStartupCheck()
@@ -214,6 +308,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.aboutWindow = window
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    // MARK: settings window
+
+    /// The settings window: a form over the backend settings store, the
+    /// discoverable twin of the `settings` query rows. One instance, shown
+    /// again (and reloaded) on every request so edits made through the
+    /// launcher rows in between are reflected.
+    nonisolated func showSettingsWindow() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let api = self.model?.api else {
+                self.model?.setPersistentStatus("Settings open once the backend is ready…")
+                return
+            }
+            let settings = self.settingsModel ?? SettingsModel(api: api) { [weak self] key, value in
+                self?.settingChanged(key, value)
+            }
+            self.settingsModel = settings
+            let window = self.settingsWindow ?? Self.makeSettingsWindow(model: settings)
+            self.settingsWindow = window
+            Task { await settings.load() }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private static func makeSettingsWindow(model: SettingsModel) -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 470),
+                              styleMask: [.titled, .closable, .miniaturizable],
+                              backing: .buffered, defer: false)
+        window.title = "Fulcrum Settings"
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.contentView = NSHostingView(rootView: SettingsView(model: model))
+        return window
+    }
+
+    /// Writes that need a host-side follow-up: theme and hotkey arrive via
+    /// State pushes and need nothing here.
+    private func settingChanged(_ key: String, _ value: String) {
+        switch key {
+        case "language":
+            I18nService.shared.setLanguage(value)
+        case "expansion-enabled":
+            refreshExpansionEngine()
+        default:
+            break
         }
     }
 
@@ -298,7 +441,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var enabled = true
             if let rows = try? await api.settingsList(),
                let row = rows.first(where: { $0.id == "expansion-enabled" }) {
-                enabled = row.badge != "off"
+                // settings-list puts the value (on/off) in the title column.
+                enabled = row.title != "off"
             }
             self?.expansionEngine.refresh(enabled: enabled,
                                           snippets: snippets)
@@ -427,7 +571,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// First-party rivet menu bar: the brand glyph as a template icon (a
     /// text title reads as another menu, an icon reads as a status item);
     /// Open runs the same toggle as the hotkey; Check for Updates opens
-    /// the update panel; Quit is the only way out of the resident process.
+    /// the update panel; Quit here (or ⌘Q while a window is key) is the
+    /// way out of the resident process — there is no Dock icon.
     private func installMenuBar(model: LauncherModel) {
         let controller = RivetMenuBarController()
         controller.install(
@@ -435,6 +580,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             items: [
                 .action(label: "Open Fulcrum", identifier: "open", handler: { [weak self] in
                     self?.showPanel()
+                }),
+                .action(label: "Settings…", identifier: "settings", handler: { [weak self] in
+                    self?.showSettingsWindow()
                 }),
                 .action(label: "Check for Updates…", identifier: "update", handler: { [weak self] in
                     guard let self else { return }

@@ -1,14 +1,15 @@
 import SwiftUI
 
 /// About panel: `Fulcrum v<version>`, the product site and the issue
-/// tracker. Shown in the Settings scene, from the menu bar's
-/// "About Fulcrum", and via the `about` launcher row (about.open
-/// delegates here). License: BUSL-1.1 — source-available, not opensource.
+/// tracker. Shown from the menu bar's "About Fulcrum", the app menu, and
+/// via the `about` launcher row (about.open delegates here). License:
+/// BUSL-1.1 — source-available, not opensource.
 struct AboutPanelView: View {
-    private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? RivetGeneratedConfig.version
-    }
+    /// The version compiled into this binary — the same number the
+    /// backend reports and the updater compares against. Info.plist is
+    /// packaging metadata that can drift on a hand-assembled bundle;
+    /// showing it here would misstate what is actually running.
+    private var version: String { RivetGeneratedConfig.version }
 
     var body: some View {
         VStack(spacing: 12) {

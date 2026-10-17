@@ -40,8 +40,12 @@
 (define (gallery-engine)
   ;; Same disabled-thunk wiring the backend uses: consult the live
   ;; settings manager at reload time so toggles take effect.
+  ;; max-results 50: the listing assertions require every gallery entry to
+  ;; be visible at once, and the default of 12 now truncates a 26-plugin
+  ;; catalog.
   (make-engine #:clipboard-store #f
                #:snippet-store #f
+               #:max-results 50
                #:plugin-manager
                (make-plugin-manager
                 (plugins-dir)
@@ -53,7 +57,7 @@
 
 (test-case "catalog is complete, unique, and stable"
   (define catalog (gallery-catalog))
-  (check-equal? (length catalog) 11)
+  (check-equal? (length catalog) 26)
   (check-equal? (length (remove-duplicates (map gallery-entry-id catalog)))
                 (length catalog))
   (check-true (equal? catalog
@@ -76,7 +80,7 @@
      (define gallery-rows
        (filter (lambda (row) (member (row-id row) '("gallery.install" "gallery.uninstall")))
                rows))
-     (check-equal? (length gallery-rows) 11)
+     (check-equal? (length gallery-rows) 26)
      (check-true (andmap (lambda (row) (pair? (member (row-id row) '("gallery.install" "gallery.uninstall"))))
                          gallery-rows))
 
@@ -187,6 +191,17 @@
        (check-equal? (settings-get manager 'plugins-disabled) "epoch")
        (check-false (findf (lambda (p) (string=? (plugin-id p) "epoch"))
                            (plugin-manager-plugins (engine-plugins engine))))
+       ;; …but the center still lists it, now offering Enable — a disabled
+       ;; plugin that vanished from the center could never be turned back on.
+       (define disabled-rows (rows-for engine "plugins"))
+       (define enable-row
+         (findf (lambda (r)
+                  (and (equal? (list-ref r 0) "plugins.toggle")
+                       (equal? (list-ref r 4) "epoch")))
+                disabled-rows))
+       (check-true (and enable-row #t))
+       (check-true (string-prefix? (list-ref enable-row 1) "Enable"))
+       (check-equal? (list-ref enable-row 7) "Disabled")
 
        ;; Toggle again re-enables.
        (with-handlers ([exn:fail? void])
@@ -276,3 +291,41 @@
        ;; needs a live server; the route computed "copied" before that).
        (with-handlers ([exn:fail? void])
          (run-action "plugins.example" "ts 42"))))))
+
+(test-case "boot! loads installed plugins and keeps disabled ones listed"
+  (with-fresh-data-dir
+   (lambda ()
+     ;; Install epoch through the gallery, then turn it off in settings.
+     (define manager (make-settings-manager (settings-path)))
+     (current-settings manager)
+     (define engine (gallery-engine))
+     (check-equal? (car (engine-run engine "gallery.install" "epoch")) "ok")
+     (settings-set! manager 'plugins-disabled "epoch")
+     ;; A fresh boot of the production wiring, parameters unset exactly as
+     ;; at process start: the first plugin load must not raise (it once
+     ;; did — the disabled-ids thunk ran before current-settings was
+     ;; published, so every installed plugin stayed unloaded until a
+     ;; later reload) and must classify the plugin as disabled.
+     (current-settings #f)
+     (current-engine #f)
+     (define booted (boot!))
+     (define mgr (engine-plugins booted))
+     (check-true (and mgr #t))
+     (check-equal? (plugin-manager-errors mgr) '())
+     (check-equal? (map plugin-id (plugin-manager-disabled-plugins mgr)) '("epoch"))
+     (check-equal? (plugin-manager-plugins mgr) '())
+     ;; The center offers to turn it back on.
+     (define rows (rows-for booted "plugins"))
+     (define enable-row
+       (findf (lambda (r)
+                (and (equal? (list-ref r 0) "plugins.toggle")
+                     (equal? (list-ref r 4) "epoch")))
+              rows))
+     (check-true (and enable-row #t))
+     ;; Re-enabled: a second boot loads it live.
+     (settings-set! (current-settings) 'plugins-disabled "")
+     (current-settings #f)
+     (current-engine #f)
+     (define rebooted (boot!))
+     (check-equal? (map plugin-id (plugin-manager-plugins (engine-plugins rebooted)))
+                   '("epoch")))))
