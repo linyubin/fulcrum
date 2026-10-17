@@ -1,0 +1,599 @@
+{
+  "device-rpcs": [],
+  "enums": [],
+  "events": [
+    {
+      "name": "ai-finished",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "copy-to-clipboard",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "notify",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "open-url",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "paste-to-frontmost",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "update-available",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    }
+  ],
+  "format": "rivet-schema",
+  "format-version": 1,
+  "records": [
+    {
+      "fields": [
+        {
+          "name": "phase",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "text",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "error",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        }
+      ],
+      "name": "AiStream"
+    },
+    {
+      "fields": [
+        {
+          "name": "text",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "metadata",
+          "type": {
+            "element": {
+              "element": {
+                "kind": "scalar",
+                "name": "String"
+              },
+              "kind": "list"
+            },
+            "kind": "list"
+          }
+        }
+      ],
+      "name": "DetailView"
+    },
+    {
+      "fields": [
+        {
+          "name": "status",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "error",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "current-version",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "available-version",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "build",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "Int64"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "published-at",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "installer",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "size-bytes",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "Int64"
+            },
+            "kind": "optional"
+          }
+        }
+      ],
+      "name": "UpdateCheck"
+    },
+    {
+      "fields": [
+        {
+          "name": "phase",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "percent",
+          "type": {
+            "kind": "scalar",
+            "name": "Int64"
+          }
+        },
+        {
+          "name": "message",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "downloaded-path",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        },
+        {
+          "name": "available-version",
+          "type": {
+            "element": {
+              "kind": "scalar",
+              "name": "String"
+            },
+            "kind": "optional"
+          }
+        }
+      ],
+      "name": "UpdateState"
+    }
+  ],
+  "rpcs": [
+    {
+      "arguments": [],
+      "name": "ai-status",
+      "result": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "clipboard-clear",
+      "result": {
+        "kind": "scalar",
+        "name": "Int64"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "query",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "clipboard-history",
+      "result": {
+        "element": {
+          "element": {
+            "kind": "scalar",
+            "name": "String"
+          },
+          "kind": "list"
+        },
+        "kind": "list"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "text",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "clipboard-record",
+      "result": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "health",
+      "result": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "index-rebuild",
+      "result": {
+        "kind": "scalar",
+        "name": "Int64"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "row-id",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "arg",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "plugin-detail",
+      "result": {
+        "kind": "record",
+        "name": "DetailView"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "plugins-list",
+      "result": {
+        "element": {
+          "element": {
+            "kind": "scalar",
+            "name": "String"
+          },
+          "kind": "list"
+        },
+        "kind": "list"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "plugins-reload",
+      "result": {
+        "kind": "scalar",
+        "name": "Void"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "arg",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "row-actions",
+      "result": {
+        "element": {
+          "element": {
+            "kind": "scalar",
+            "name": "String"
+          },
+          "kind": "list"
+        },
+        "kind": "list"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "arg",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "run-action",
+      "result": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "query",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "search",
+      "result": {
+        "element": {
+          "element": {
+            "kind": "scalar",
+            "name": "String"
+          },
+          "kind": "list"
+        },
+        "kind": "list"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "settings-list",
+      "result": {
+        "element": {
+          "element": {
+            "kind": "scalar",
+            "name": "String"
+          },
+          "kind": "list"
+        },
+        "kind": "list"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "key",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "value",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "settings-set",
+      "result": {
+        "kind": "scalar",
+        "name": "Bool"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "snippet-delete",
+      "result": {
+        "kind": "scalar",
+        "name": "Bool"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "snippet-list",
+      "result": {
+        "element": {
+          "element": {
+            "kind": "scalar",
+            "name": "String"
+          },
+          "kind": "list"
+        },
+        "kind": "list"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "id",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "name",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "keyword",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        },
+        {
+          "name": "text",
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "name": "snippet-save",
+      "result": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "arguments": [
+        {
+          "name": "manual",
+          "type": {
+            "kind": "scalar",
+            "name": "Bool"
+          }
+        }
+      ],
+      "name": "update-check",
+      "result": {
+        "kind": "record",
+        "name": "UpdateCheck"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "update-download",
+      "result": {
+        "kind": "scalar",
+        "name": "Void"
+      }
+    },
+    {
+      "arguments": [],
+      "name": "update-state",
+      "result": {
+        "kind": "record",
+        "name": "UpdateState"
+      }
+    }
+  ],
+  "rvt-protocol": 1,
+  "states": [
+    {
+      "name": "ai-stream",
+      "type": {
+        "kind": "record",
+        "name": "AiStream"
+      }
+    },
+    {
+      "name": "hotkey",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "search-revision",
+      "type": {
+        "kind": "scalar",
+        "name": "Int64"
+      }
+    },
+    {
+      "name": "theme",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    },
+    {
+      "name": "version",
+      "type": {
+        "kind": "scalar",
+        "name": "String"
+      }
+    }
+  ]
+}

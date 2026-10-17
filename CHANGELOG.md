@@ -38,6 +38,19 @@ independently per platform packaging run.
 
 ### Fixed
 
+- **The updater compiled only against the pinned Rivet.** `app/update.rkt`
+  carried its own `platform-symbol`/`architecture-symbol` copies; when
+  Rivet #258 centralized those helpers into `rivet/distribution`, any
+  module requiring both — the updater test — failed to compile, invisible
+  to CI (which installs the v0.11.0 pin) while every machine following
+  latest Rivet broke. The local copies are gone and the shared helpers are
+  re-exported, and the pin moved to a post-#258 commit. The same bump
+  adopts Rivet's multi-installable artifact shape (`component` field,
+  rivet 79b1bd8) — Fulcrum's feed carries one installable per platform,
+  so the discriminator travels as `#f` — and commits a
+  `rivet-schema.json` baseline with a CI schema-compatibility check, the
+  `raco rivet doctor` fix-next item.
+
 - **Plugins were dead after every restart.** The backend built its plugin
   manager before publishing the settings store, and the manager's first
   load consults the disabled-plugins setting — that consult raised, the
