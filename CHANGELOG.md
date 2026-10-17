@@ -38,6 +38,12 @@ independently per platform packaging run.
 
 ### Fixed
 
+- **The Settings window's titlebar icon was blank.** WinUI shows nothing
+  left of the title until an icon is set, and no window ever set one.
+  The Settings window now points `AppWindow.SetIcon` at its own exe —
+  the app icon lives there at resource ID 1 — so the staged tree and
+  the installed build resolve it identically.
+
 - **The launcher panel carried Windows caption buttons, and the X ended
   the whole app.** The macOS launcher panel ships with no close
   affordance (`.titled` without `.closable` — a floating card, Esc and
