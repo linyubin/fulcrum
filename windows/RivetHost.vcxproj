@@ -114,6 +114,13 @@
   </ItemGroup>
   <ItemGroup><Midl Include="Project.idl"><SubType>Code</SubType></Midl></ItemGroup>
   <ItemGroup><Manifest Include="app.manifest" /></ItemGroup>
+  <!-- raco rivet build generates the app icon + VERSIONINFO resource script
+       and points RIVET_WINDOWS_ICON_RC at it; without this group the exe
+       ships with no icon and no file identity, and the tray falls back to
+       the generic application icon. -->
+  <ItemGroup Condition="'$(RIVET_WINDOWS_ICON_RC)'!=''">
+    <ResourceCompile Include="$(RIVET_WINDOWS_ICON_RC)" />
+  </ItemGroup>
 
   <Target Name="ValidateRivetEnvironment" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(RIVET_ROOT)'==''" Text="RIVET_ROOT is not set. Run this project through `raco rivet build`." />
