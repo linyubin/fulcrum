@@ -980,7 +980,20 @@ void MainWindow::ShowLauncher() {
   QueryBox().Text(L"");
   SearchAsync(std::wstring(L""));
   this->Activate();
-  QueryBox().Focus(winrt::Microsoft::UI::Xaml::FocusState::Programmatic);
+  // The hotkey path runs in a WM_HOTKEY handler, which grants the
+  // foreground right; claiming it explicitly also covers the tray-open
+  // path and the first re-summon after AppWindow().Hide(), which WinUI
+  // otherwise shows without bringing to the foreground.
+  if (HWND hwnd = ::FindWindowW(nullptr, L"Fulcrum")) {
+    ::SetForegroundWindow(hwnd);
+  }
+  // Focusing synchronously with the show races the activation: the caret
+  // never appears and the first keystrokes land nowhere, so the user had
+  // to click the panel before it accepted typing. Queue the focus for
+  // after the activation tick settles.
+  DispatcherQueue().TryEnqueue([this]() {
+    QueryBox().Focus(winrt::Microsoft::UI::Xaml::FocusState::Programmatic);
+  });
 }
 
 void MainWindow::HideLauncher() { this->AppWindow().Hide(); }

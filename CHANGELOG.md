@@ -38,6 +38,15 @@ independently per platform packaging run.
 
 ### Fixed
 
+- **The summoned panel did not accept typing until clicked.** Focusing
+  the query box synchronously with `Activate()` races the activation —
+  the focus lands on a window that is not foreground yet and is dropped
+  when activation completes, so the caret never appeared and the first
+  keystrokes went nowhere. The focus is queued for the tick after
+  activation settles, and the hotkey path now claims the foreground it
+  is entitled to (`WM_HOTKEY` grants it; the tray-open path and the
+  first re-summon after a hide needed it too).
+
 - **The Settings window's titlebar icon was blank.** WinUI shows nothing
   left of the title until an icon is set, and no window ever set one.
   The Settings window now points `AppWindow.SetIcon` at its own exe —
