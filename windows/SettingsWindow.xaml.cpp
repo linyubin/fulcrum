@@ -92,9 +92,18 @@ SettingsWindow::SettingsWindow() {
     SystemBackdrop(mx::Media::MicaBackdrop());
     if (auto appWindow = this->AppWindow()) {
       appWindow.Resize(winrt::Windows::Graphics::SizeInt32{680, 840});
+      // Titled Windows windows carry their icon left of the title; WinUI
+      // ships a blank unless one is set. Our exe embeds the app icon at
+      // resource ID 1 (rivet build), so pointing at the exe itself works
+      // in the staged tree and after install alike.
+      wchar_t exe_path[MAX_PATH];
+      if (::GetModuleFileNameW(nullptr, exe_path, MAX_PATH) > 0) {
+        appWindow.SetIcon(exe_path);
+      }
     }
   } catch (...) {
-    // Backdrop and sizing are polish; the form works without them.
+    // Backdrop, sizing and the titlebar icon are polish; the form works
+    // without them.
   }
 }
 
