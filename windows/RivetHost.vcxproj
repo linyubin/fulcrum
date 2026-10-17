@@ -50,9 +50,13 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
     <!-- Forwarded to the rivet-host library via ProjectReference so the
-         static link never mixes RuntimeLibrary flavors (LNK2038). -->
-    <RivetRuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RivetRuntimeLibrary>
-    <RivetRuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RivetRuntimeLibrary>
+         static link never mixes RuntimeLibrary flavors (LNK2038). The
+         hybrid CRT applies only to self-contained packaging (the same
+         condition Directory.Build.props uses to import HybridCRT.props);
+         development builds must stay empty so the library keeps the
+         DLL CRT and matches the exe's default. -->
+    <RivetRuntimeLibrary Condition="'$(RivetSelfContained)'=='true' and '$(Configuration)'=='Debug'">MultiThreadedDebug</RivetRuntimeLibrary>
+    <RivetRuntimeLibrary Condition="'$(RivetSelfContained)'=='true' and '$(Configuration)'=='Release'">MultiThreaded</RivetRuntimeLibrary>
   </PropertyGroup>
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="PropertySheets">
