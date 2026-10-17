@@ -92,8 +92,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Update flow (updater 0.2): panel window + RPC orchestration.
     private var updateController: UpdateController?
     private var updateWindow: NSWindow?
-    // About panel (Settings scene + menu bar + the `about` launcher row).
+    // About panel (menu bar + app menu + the `about` launcher row).
     private var aboutWindow: NSWindow?
+    // Settings window (app menu ⌘, + the `settings` launcher row).
+    private var settingsWindow: NSWindow?
+    private var settingsModel: SettingsModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One instance owns the global hotkey; second launches exit here via
@@ -156,6 +159,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "About Fulcrum",
                         action: #selector(showAboutFromMenu(_:)),
                         keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Settings…",
+                        action: #selector(showSettingsFromMenu(_:)),
+                        keyEquivalent: ",")
         appMenu.addItem(withTitle: "Check for Updates…",
                         action: #selector(checkForUpdatesFromMenu(_:)),
                         keyEquivalent: "")
@@ -200,6 +207,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showAboutPanel()
     }
 
+    @objc private func showSettingsFromMenu(_ sender: Any?) {
+        showSettingsWindow()
+    }
+
     @objc private func checkForUpdatesFromMenu(_ sender: Any?) {
         updateController?.checkForUpdates()
         showUpdatePanel()
@@ -224,7 +235,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 if let rows = try? await api.settingsList(),
                    let language = rows.first(where: { $0.id == "language" }) {
-                    I18nService.shared.setLanguage(language.badge)
+                    // settings-list puts the value in the title column.
+                    I18nService.shared.setLanguage(language.title)
                 }
             }
             self?.updateController?.silentStartupCheck()
@@ -296,6 +308,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.aboutWindow = window
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    // MARK: settings window
+
+    /// The settings window: a form over the backend settings store, the
+    /// discoverable twin of the `settings` query rows. One instance, shown
+    /// again (and reloaded) on every request so edits made through the
+    /// launcher rows in between are reflected.
+    nonisolated func showSettingsWindow() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let api = self.model?.api else {
+                self.model?.setPersistentStatus("Settings open once the backend is ready…")
+                return
+            }
+            let settings = self.settingsModel ?? SettingsModel(api: api) { [weak self] key, value in
+                self?.settingChanged(key, value)
+            }
+            self.settingsModel = settings
+            let window = self.settingsWindow ?? Self.makeSettingsWindow(model: settings)
+            self.settingsWindow = window
+            Task { await settings.load() }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private static func makeSettingsWindow(model: SettingsModel) -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 470),
+                              styleMask: [.titled, .closable, .miniaturizable],
+                              backing: .buffered, defer: false)
+        window.title = "Fulcrum Settings"
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.contentView = NSHostingView(rootView: SettingsView(model: model))
+        return window
+    }
+
+    /// Writes that need a host-side follow-up: theme and hotkey arrive via
+    /// State pushes and need nothing here.
+    private func settingChanged(_ key: String, _ value: String) {
+        switch key {
+        case "language":
+            I18nService.shared.setLanguage(value)
+        case "expansion-enabled":
+            refreshExpansionEngine()
+        default:
+            break
         }
     }
 
@@ -380,7 +441,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var enabled = true
             if let rows = try? await api.settingsList(),
                let row = rows.first(where: { $0.id == "expansion-enabled" }) {
-                enabled = row.badge != "off"
+                // settings-list puts the value (on/off) in the title column.
+                enabled = row.title != "off"
             }
             self?.expansionEngine.refresh(enabled: enabled,
                                           snippets: snippets)
@@ -518,6 +580,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             items: [
                 .action(label: "Open Fulcrum", identifier: "open", handler: { [weak self] in
                     self?.showPanel()
+                }),
+                .action(label: "Settings…", identifier: "settings", handler: { [weak self] in
+                    self?.showSettingsWindow()
                 }),
                 .action(label: "Check for Updates…", identifier: "update", handler: { [weak self] in
                     guard let self else { return }

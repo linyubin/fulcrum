@@ -455,6 +455,13 @@ struct FulcrumAPI {
     func settingsList() async throws -> [ResultRow] {
         (try await generated.settings_list()).compactMap { ResultRow.from($0) }
     }
+    /// settings-list rows carry the value in the title column and the
+    /// description in the subtitle column (badge is empty — reading it is
+    /// the historical bug that left language and expansion settings dead).
+    func settingsSet(key: String, value: String) async throws -> Bool {
+        try await generated.settings_set(key: key, value: value)
+    }
+    func aiStatus() async throws -> String { try await generated.ai_status() }
     func updateCheck(manual: Bool) async throws -> RivetTypes.UpdateCheck {
         try await generated.update_check(manual: manual)
     }
@@ -712,9 +719,12 @@ final class LauncherModel: ObservableObject {
                         self.hide()
                     case "delegated":
                         // Host-native actions: the backend cannot reach
-                        // other apps' windows or this app's About panel.
+                        // other apps' windows or this app's own windows.
                         if row.id == "about.open" {
                             AppDelegate.shared?.showAboutPanel()
+                            self.hide()
+                        } else if row.id == "settings.open" {
+                            AppDelegate.shared?.showSettingsWindow()
                             self.hide()
                         } else if WindowCommands.performAndRemember(id: row.id) {
                             self.hide()

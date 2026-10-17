@@ -72,8 +72,8 @@ public enum RivetTypes {
 
 }
 
-private func encode_Int64(_ v: Int64) -> RivetValue { .int64(v) }
 private func encode_String(_ v: String) -> RivetValue { .string(v) }
+private func encode_Int64(_ v: Int64) -> RivetValue { .int64(v) }
 private func encode__List_String_(_ v: [String]) -> RivetValue { .list(v.map(encode_String)) }
 private func encode__List_List_String_(_ v: [[String]]) -> RivetValue { .list(v.map(encode__List_String_)) }
 private func encode_DetailView(_ v: RivetTypes.DetailView) -> RivetValue { .list([encode_String(v.text), encode__List_List_String_(v.metadata)]) }
@@ -85,8 +85,8 @@ private func encode_UpdateCheck(_ v: RivetTypes.UpdateCheck) -> RivetValue { .li
 private func encode_UpdateState(_ v: RivetTypes.UpdateState) -> RivetValue { .list([encode_String(v.phase), encode_Int64(v.percent), encode__Optional_String_(v.message), encode__Optional_String_(v.downloaded_path), encode__Optional_String_(v.available_version)]) }
 private func encode_AiStream(_ v: RivetTypes.AiStream) -> RivetValue { .list([encode_String(v.phase), encode_String(v.text), encode__Optional_String_(v.error)]) }
 
-private func decode_Int64(_ v: RivetValue) throws -> Int64 { guard case .int64(let x) = v else { throw RivetGeneratedError.typeMismatch("Int64") }; return x }
 private func decode_String(_ v: RivetValue) throws -> String { guard case .string(let x) = v else { throw RivetGeneratedError.typeMismatch("String") }; return x }
+private func decode_Int64(_ v: RivetValue) throws -> Int64 { guard case .int64(let x) = v else { throw RivetGeneratedError.typeMismatch("Int64") }; return x }
 private func decode__List_String_(_ v: RivetValue) throws -> [String] { guard case .list(let xs) = v else { throw RivetGeneratedError.typeMismatch("(List String)") }; return try xs.map(decode_String) }
 private func decode__List_List_String_(_ v: RivetValue) throws -> [[String]] { guard case .list(let xs) = v else { throw RivetGeneratedError.typeMismatch("(List (List String))") }; return try xs.map(decode__List_String_) }
 private func decode_DetailView(_ v: RivetValue) throws -> RivetTypes.DetailView { guard case .list(let xs) = v, xs.count == 2 else { throw RivetGeneratedError.typeMismatch("DetailView") }; return RivetTypes.DetailView(text: try decode_String(xs[0]), metadata: try decode__List_List_String_(xs[1])) }
@@ -123,6 +123,10 @@ public struct RivetAPI: Sendable {
     public let client: RivetClient
     public init(client: RivetClient) { self.client = client }
 
+    public func ai_status() async throws -> String {
+        let rivetResult = try await client.call("ai-status", arguments: [])
+        return try decode_String(rivetResult)
+    }
     public func clipboard_clear() async throws -> Int64 {
         let rivetResult = try await client.call("clipboard-clear", arguments: [])
         return try decode_Int64(rivetResult)

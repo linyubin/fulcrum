@@ -6,6 +6,23 @@ independently per platform packaging run.
 
 ## [Unreleased]
 
+### Added
+
+- **A settings window on all three platforms.** Until now every setting
+  lived behind query syntax (`settings`, `ai key …`, `ai model …`) — fine
+  once you know it, invisible until you do. The launcher's leading
+  `Settings…` row, the menu bar / tray menu, and ⌘, on macOS now open a
+  native window over the same settings store: General (language, theme,
+  hotkey, result count), Features (clipboard history and its limit, web
+  search rows and default bang, snippet expansion, plugins and their
+  timeout), AI (provider, model, base URL, persona, and the API key with a
+  live readiness line — the key is saved locally and never crosses the
+  wire back), Sync & Updates (sync folder, update feed). Edits apply as
+  you make them; a value the backend refuses (a bad hotkey, an
+  out-of-range number) is reported inline and the form falls back to the
+  stored value. SwiftUI grouped form on macOS, a Mica window in the
+  Windows Settings idiom, GTK on Linux. The query rows stay for typing.
+
 ### Changed
 
 - **macOS: Fulcrum is now a menu bar app — no Dock icon.** The launcher
@@ -35,6 +52,20 @@ independently per platform packaging run.
   paints the missing-icon box).
 
 ### Fixed
+
+- **Three settings that never worked.** The settings-list contract
+  spelled booleans `#t`/`#f` while every host compared against `off`, so
+  "off" never matched — snippet auto-expansion could not be turned off on
+  any platform, and the language setting was read from the wrong column
+  on macOS (always empty, so it never applied). Booleans now travel as
+  `on`/`off` end to end, and settings-set accepts those words back along
+  with the script spellings true/false/1/0.
+
+- **The quick settings rows were nine cells wide.** The row contract is
+  eight; hosts that check the width (macOS) silently dropped them, so an
+  empty query never showed the theme/hotkey/language rows it promised.
+  They are eight cells now, and a wire test asserts the width of every
+  row in every query so this class of bug cannot ship again.
 
 - **macOS: a stray "Fulcrum Settings" window appeared on every launch.**
   The About panel rode a SwiftUI Settings scene, and on current macOS

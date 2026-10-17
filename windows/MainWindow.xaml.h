@@ -126,6 +126,10 @@ struct MainWindow : MainWindowT<MainWindow> {
   // About panel (tray menu + the `about` launcher row): one ContentDialog
   // with version, tagline, license and the site/issue links.
   winrt::fire_and_forget ShowAbout();
+  // Settings window (tray menu + the `settings` launcher row): one
+  // instance, reloaded on every show so launcher-row edits are reflected.
+  void ShowSettings();
+  winrt::RivetHost::SettingsWindow settings_window_{nullptr};
 
   std::shared_ptr<rivet::windows::Backend> backend_;
   std::unique_ptr<rivet_app::API> api_;

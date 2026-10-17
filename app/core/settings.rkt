@@ -157,6 +157,11 @@
   (-> settings-manager? (listof settings-entry?))
   (for/list ([key (in-list (sort (hash-keys (settings-manager-schema manager)) symbol<?))])
     (define spec (hash-ref (settings-manager-schema manager) key))
+    (define value (settings-get manager key))
     (settings-entry (symbol->string key)
-                    (format "~a" (settings-get manager key))
+                    ;; Booleans travel as on/off — the words the launcher's
+                    ;; setting badges already use and settings-set accepts
+                    ;; back — so hosts never meet Racket's #t/#f spelling.
+                    (cond [(boolean? value) (if value "on" "off")]
+                          [else (format "~a" value)])
                     (caddr spec))))

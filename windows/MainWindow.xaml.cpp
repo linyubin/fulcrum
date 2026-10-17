@@ -4,6 +4,7 @@
 #include "MainWindow.g.cpp"
 #endif
 #include "GeneratedBackend.hpp"
+#include "SettingsWindow.xaml.h"
 #include "WindowCommands.h"
 
 #include <shellapi.h>
@@ -23,6 +24,7 @@ constexpr UINT kTrayIconId = 0xF11D;
 constexpr int kTrayMenuOpen = 1;
 constexpr int kTrayMenuAbout = 2;
 constexpr int kTrayMenuQuit = 3;
+constexpr int kTrayMenuSettings = 4;
 
 constexpr int kHotkeyIdPrimary = 0xF11C;  // Alt+Space
 constexpr int kHotkeyIdFallback = 0xF11D; // Ctrl+Alt+Space
@@ -890,6 +892,7 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
       HMENU menu = ::CreatePopupMenu();
       if (menu != nullptr) {
         ::AppendMenuW(menu, MF_STRING, kTrayMenuOpen, L"Open Fulcrum");
+        ::AppendMenuW(menu, MF_STRING, kTrayMenuSettings, L"Settings…");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuAbout, L"About Fulcrum");
         ::AppendMenuW(menu, MF_STRING, kTrayMenuQuit, L"Quit Fulcrum");
         ::SetForegroundWindow(hwnd);  // so outside clicks dismiss the menu
@@ -898,6 +901,8 @@ void MainWindow::HandleTrayMessage(std::uint32_t message, std::int64_t lParam,
         ::DestroyMenu(menu);
         if (choice == kTrayMenuOpen) {
           ShowLauncher();
+        } else if (choice == kTrayMenuSettings) {
+          ShowSettings();
         } else if (choice == kTrayMenuAbout) {
           ShowAbout();
         } else if (choice == kTrayMenuQuit) {
@@ -1427,9 +1432,13 @@ void MainWindow::RunSelected() {
             window->StartUpdateProgressPoll();
           } else if (status == "delegated") {
             // Host-native actions: window commands reach other apps'
-            // windows; about.open renders this app's about dialog.
+            // windows; about.open and settings.open render this app's own
+            // windows.
             if (row.id == "about.open") {
               window->ShowAbout();
+            } else if (row.id == "settings.open") {
+              window->HideLauncher();
+              window->ShowSettings();
             } else if (fulcrum::RunWindowCommand(row.id)) {
               window->HideLauncher();
             } else {
@@ -1495,6 +1504,26 @@ winrt::fire_and_forget MainWindow::ShowAbout() {
   dialog.CloseButtonText(t("updateClose"));
   dialog.XamlRoot(Content().XamlRoot());
   co_await dialog.ShowAsync();
+}
+
+// ---- settings -------------------------------------------------------------
+
+// The tray menu's "Settings…" and the `settings` launcher row land here: a
+// separate top-level window over the backend settings store (the launcher
+// overlay hides on focus loss, so settings cannot live inside it). One
+// instance; every show re-attaches, which reloads the current values.
+void MainWindow::ShowSettings() {
+  if (api_ == nullptr) {
+    SetStatusError(L"Settings open once the backend is ready.");
+    return;
+  }
+  if (settings_window_ == nullptr) {
+    auto window = winrt::make<SettingsWindow>();
+    window.Closed([this](auto&&, auto&&) { settings_window_ = nullptr; });
+    settings_window_ = window;
+  }
+  winrt::get_self<SettingsWindow>(settings_window_)->Attach(api_.get());
+  settings_window_.Activate();
 }
 
 // ---- snippet auto-expansion ----------------------------------------------
