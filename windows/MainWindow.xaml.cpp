@@ -803,7 +803,20 @@ void MainWindow::FinishNativeSetup() {
       presenter.IsResizable(false);
       presenter.IsMaximizable(false);
       presenter.IsMinimizable(false);
+      // The macOS launcher panel ships with no close affordance at all
+      // (.titled without .closable); dropping the border and titlebar is
+      // the Windows equivalent — the caption X would otherwise sit in the
+      // corner and end the whole process: tray, hotkey and all.
+      presenter.SetBorderAndTitleBar(false, false);
     }
+    // Alt+F4 and system close requests hide the panel instead of ending
+    // the process — the Linux host made the same call for its WM close
+    // button. Quitting lives in the tray menu, whose Destroy() bypasses
+    // this handler.
+    appWindow.Closing([this](auto&&, auto&& args) {
+      args.Cancel(true);
+      this->HideLauncher();
+    });
   }
   RECT work{};
   ::SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
