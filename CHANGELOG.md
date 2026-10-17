@@ -38,6 +38,18 @@ independently per platform packaging run.
 
 ### Fixed
 
+- **The launcher panel carried Windows caption buttons, and the X ended
+  the whole app.** The macOS launcher panel ships with no close
+  affordance (`.titled` without `.closable` — a floating card, Esc and
+  defocus dismiss it) and the Linux host already routes its WM close
+  button to hide instead of quit; Windows alone floated the system
+  min/max/close trio over the acrylic, with no `Closing` handler — so
+  the most prominent button on the panel terminated the process: tray,
+  hotkey, updates and all. The border and titlebar are gone
+  (`SetBorderAndTitleBar(false, false)`), dismissal is Esc / defocus /
+  the tray, Alt+F4 hides instead of quitting, and the only exit remains
+  the tray menu's Quit Fulcrum.
+
 - **The Windows exe shipped with no icon and no file identity.** Rivet's
   build generates an icon + VERSIONINFO resource script and points
   `RIVET_WINDOWS_ICON_RC` at it, but the host project never compiled it —
