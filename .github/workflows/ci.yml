@@ -14,7 +14,7 @@ concurrency:
 # Contexts aren't allowed in `uses:`, so the setup-embed-racket action
 # refs must be bumped in lockstep by hand.
 env:
-  RIVET_PIN: v0.11.0
+  RIVET_PIN: bb249d3fe46698e961edbd6386361b8879e9dada
 
 jobs:
   backend:
@@ -33,6 +33,9 @@ jobs:
           distribution: full
       - name: Install Rivet (catalog)
         run: raco pkg install --auto --no-docs 'https://github.com/turinglambdaai/rivet.git#${{ env.RIVET_PIN }}'
+        shell: bash
+      - name: Schema baseline is compatible
+        run: raco rivet schema check rivet-schema.json --json
         shell: bash
       - name: Verify release version alignment
         run: bash scripts/check-release-version.sh
@@ -53,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up embeddable Racket CS
-        uses: turinglambdaai/rivet/.github/actions/setup-embed-racket@v0.11.0
+        uses: turinglambdaai/rivet/.github/actions/setup-embed-racket@bb249d3fe46698e961edbd6386361b8879e9dada
       # Installed after the embeddable runtime so the catalog dependency
       # closure (cext-lib, crypto-lib, keel) resolves against the minimal
       # build — it ships no packages of its own.

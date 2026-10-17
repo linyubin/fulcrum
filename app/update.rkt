@@ -114,17 +114,11 @@
 
 ;; ---------- platform identity ----------
 
-;; rivet release tooling emits these exact symbols into update manifests
-(define (platform-symbol)
-  (case (system-type 'os)
-    [(macosx) 'macos]
-    [(windows) 'windows]
-    [else 'linux]))
-
-(define (architecture-symbol)
-  (case (system-type 'arch)
-    [(aarch64 arm64) 'arm64]
-    [else 'x64]))
+;; platform-symbol and architecture-symbol come from `rivet/distribution` —
+;; rivet b99c4d9 (#258) centralized the release-target vocabulary the
+;; release tooling emits into manifests. The provide list above re-exports
+;; the imported bindings; carrying local copies would collide with the
+;; shared names in any module requiring both.
 
 ;; The feed serves installers, and the release pipeline pins versioned,
 ;; architecture-suffixed names (fulcrum-<version>-macos-arm64.zip,
@@ -289,7 +283,10 @@
                          (current-update-public-key)
                          update-key-id
                          (rollout-bucket)
-                         maximum-download-bytes))
+                         maximum-download-bytes
+                         ;; The feed carries exactly one installable per
+                         ;; platform/arch — no component discriminator.
+                         #f))
        (define candidate (select-update config manifest))
        (cond
          [candidate
@@ -366,7 +363,8 @@
                     (current-update-public-key)
                     update-key-id
                     (rollout-bucket)
-                    maximum-download-bytes))
+                    maximum-download-bytes
+                    #f))
   (define destination (destination-path data-dir candidate))
   (set-box! last-progress-seconds (current-seconds))
   (define worker-thread

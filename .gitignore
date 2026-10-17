@@ -3,6 +3,12 @@
 build/
 dist/
 
+# MSVC/WinUI intermediates from local host builds
+windows/obj/
+windows/RivetHost/
+windows/Generated Files/
+windows/x64/
+
 # Local environment and secrets
 .env
 *.der
@@ -20,6 +26,3 @@ Thumbs.db
 
 # Racket compilation artifacts
 compiled/
-
-# Generator dumps
-rivet-schema.json
