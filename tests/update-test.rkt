@@ -39,14 +39,16 @@
 ;; ---------- artifact naming -------------------------------------------------
 
 (define (candidate-for url sha size)
+  ;; #f is the component discriminator (rivet 79b1bd8): the app artifact
+  ;; is the feed's only installable for its platform/arch pair.
   (update-candidate
    (update-manifest "site.jrtx.fulcrum" "9.9.9" 9 'stable
                     "2026-10-10T00:00:00Z" "0.0.0" #f #t 100
                     (list (update-artifact (platform-symbol)
                                            (architecture-symbol)
-                                           url sha size 'zip '())))
+                                           url sha size 'zip '() #f)))
    (update-artifact (platform-symbol) (architecture-symbol)
-                    url sha size 'zip '())))
+                    url sha size 'zip '() #f)))
 
 (test-case "the downloaded file keeps the manifest's release name"
   (check-equal?
