@@ -6,6 +6,8 @@ independently per platform packaging run.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-17
+
 ### Added
 
 - **A settings window on all three platforms.** Until now every setting
