@@ -55,7 +55,11 @@
                    (sha256-file/hex path)
                    (file-size path)
                    installer
-                   '()))
+                   '()
+                   ;; No component discriminator: the feed pins exactly one
+                   ;; installable per platform/arch, which the client's
+                   ;; updater-config matches with #f (rivet 79b1bd8).
+                   #f))
 
 (define published-at
   (let ([d (seconds->date (current-seconds) #t)])
