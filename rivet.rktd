@@ -22,4 +22,10 @@
         ;; for the update feed is still the tar.gz (versioned name in
         ;; release.yml, the signed channel manifest, and the updater all pin
         ;; it); the new formats ship as GitHub release assets only.
-        (linux-formats . ("deb" "rpm" "appimage")) (dmg-background . "assets/dmg-background.png") (windows-installer-bitmaps . #hasheq((banner . "assets/wizard-banner.bmp") (dialog . "assets/wizard-dialog.bmp")))))
+        (linux-formats . ("deb" "rpm" "appimage")))
+        ;; No dmg-background / windows-installer-bitmaps: the entries used
+        ;; to name files that never existed in the repo, which the old
+        ;; rivet pin ignored silently and the current pin fails honestly
+        ;; on. Rivet falls back to the stock single-folder DMG and the
+        ;; standard WiX wizard; custom installer art lands with real
+        ;; assets, not placeholder paths.
