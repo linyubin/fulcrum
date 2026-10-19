@@ -122,6 +122,42 @@
 (define titles (for/list ([row (in-list rows-val)]) (list-ref row 1)))
 (check! "search finds snippet" (and (member "Verify snippet" titles) #t) #t)
 
+;; Every host consumes the same eight cells, including the current badge.
+(define-values (quick-rows quick-error _quick-events)
+  (call-rpc 40 (list "search" "")))
+(check! "home search no error" quick-error #f)
+(define quick-theme
+  (for/first ([row (in-list quick-rows)]
+              #:when (and (equal? (car row) "settings.set")
+                          (equal? (list-ref row 4) "theme")))
+    row))
+(check! "home theme row has eight cells" (and quick-theme (length quick-theme)) 8)
+(check! "home theme badge is current value"
+        (and quick-theme (list-ref quick-theme 7)) "system")
+(define-values (setting-rows setting-error _setting-events)
+  (call-rpc 41 (list "search" "settings")))
+(check! "settings search no error" setting-error #f)
+(define setting-theme
+  (for/first ([row (in-list setting-rows)]
+              #:when (and (equal? (car row) "settings.set")
+                          (equal? (list-ref row 4) "theme")))
+    row))
+(check! "settings theme badge is current value"
+        (and setting-theme (list-ref setting-theme 7)) "system")
+(define-values (setting-result setting-run-error _setting-run-events)
+  (call-rpc 42 (list "run-action" "settings.set" "theme")))
+(check! "settings action succeeds" (list setting-result setting-run-error)
+        '("ok" #f))
+(define-values (updated-rows _updated-error _updated-events)
+  (call-rpc 43 (list "search" "settings")))
+(define updated-theme
+  (for/first ([row (in-list updated-rows)]
+              #:when (and (equal? (car row) "settings.set")
+                          (equal? (list-ref row 4) "theme")))
+    row))
+(check! "settings badge updates after cycling"
+        (and updated-theme (list-ref updated-theme 7)) "light")
+
 ;; The two RPCs that shipped broken: their handlers must reach the core
 ;; stores, not recurse into the RPC's own (zero-argument) definition.
 (define-values (sl _sle _sleve) (call-rpc 5 (list "settings-list")))
