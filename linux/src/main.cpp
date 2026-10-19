@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -33,9 +34,9 @@
 #include <optional>
 #include <string>
 #include <thread>
-#include <tuple>
 #include <utility>
 #include <vector>
+#include <unistd.h>
 
 #include "GeneratedBackend.hpp"
 #include "system_services.hpp"
@@ -245,6 +246,8 @@ void install_shutdown_hook_once();
 // Tray menu composition (defined after Launcher). Called when the backend
 // `language` setting lands so the labels follow it without a restart.
 void apply_tray_language();
+void request_restart();
+bool g_restart_requested{false};
 
 // Settings window (defined after Launcher): the tray menu and the leading
 // settings row open it.
@@ -499,8 +502,7 @@ bool run_window_command(std::string const& id) {
 // the files beside the host; the embedded fallback table below keeps the
 // same keys for runs where nothing is staged. Lookup: active language → the
 // other language → the key itself. The active language follows the backend's
-// `language` setting, read once in pull_host_settings — a change applies on
-// the next launch, matching this host's one-shot settings pull.
+// `language` setting, refreshed after settings changes as well as at startup.
 using I18nTable = std::map<std::string, std::string>;
 
 struct I18nEntry {
@@ -536,6 +538,43 @@ I18nEntry const kI18nFallback[] = {
     {"trayCheckUpdates", "检查更新…", "Check for Updates…"},
     {"trayAbout", "关于 Fulcrum", "About Fulcrum"},
     {"trayQuit", "退出 Fulcrum", "Quit Fulcrum"},
+    {"trayRestart", "重启 Fulcrum", "Restart Fulcrum"},
+    {"appMenu", "应用菜单", "Application menu"},
+    {"searchPlaceholder", "搜索应用、剪贴板、片段、网页…",
+     "Search apps, clipboard, snippets, the web…"},
+    {"navigationHint", "↑↓ 选择 · 回车执行 · Esc 隐藏 — Fulcrum",
+     "↑↓ navigate · ↵ run · esc hide — Fulcrum"},
+    {"ready", "就绪 — 使用热键或 fulcrum --toggle 唤出",
+     "Ready — hotkey or `fulcrum --toggle`"},
+    {"settingUpdated", "设置已更新", "Setting updated"},
+    {"notSet", "未设置", "Not set"},
+    {"setting.language", "语言", "Language"},
+    {"setting.theme", "主题", "Theme"},
+    {"setting.hotkey", "全局快捷键", "Hotkey"},
+    {"setting.max-results", "候选数量", "Maximum results"},
+    {"setting.clipboard-enabled", "剪贴板历史", "Clipboard history"},
+    {"setting.expansion-enabled", "片段自动展开", "Snippet expansion"},
+    {"setting.web-search-enabled", "网页搜索", "Web search"},
+    {"setting.plugins-enabled", "插件", "Plugins"},
+    {"setting.ai-provider", "AI 服务商", "AI provider"},
+    {"setting.language.description", "回车切换中文与英文，立即生效",
+     "Select to switch between Chinese and English immediately"},
+    {"setting.theme.description", "回车切换跟随系统、浅色、深色，立即生效",
+     "Select to cycle system, light and dark immediately"},
+    {"setting.hotkey.description", "回车切换全局唤出快捷键",
+     "Select to cycle the global summon hotkey"},
+    {"setting.max-results.description", "回车切换候选数量",
+     "Select to cycle the maximum results"},
+    {"setting.clipboard-enabled.description", "回车切换剪贴板历史记录",
+     "Select to toggle clipboard history"},
+    {"setting.expansion-enabled.description", "自动展开在 Linux 上不受支持",
+     "Automatic expansion is not supported on Linux"},
+    {"setting.web-search-enabled.description", "回车切换网页搜索候选",
+     "Select to toggle web search results"},
+    {"setting.plugins-enabled.description", "回车切换插件加载",
+     "Select to toggle plugin loading"},
+    {"setting.ai-provider.description", "回车切换未设置、OpenAI、Anthropic、Ollama",
+     "Select to cycle not set, OpenAI, Anthropic and Ollama"},
     {"updateUpToDate", "已是最新版本", "Fulcrum is up to date"},
     {"updateCheckFailed", "检查更新失败：{0}", "Update check failed: {0}"},
     {"trayFixHotkey", "修复 Alt+Space 冲突", "Fix Alt+Space conflict"},
@@ -731,9 +770,7 @@ void load_i18n(std::filesystem::path const& exe_dir) {
   }
 }
 
-void set_i18n_language(std::string const& lang) {
-  g_i18n_active = (lang == "en") ? 1 : 0;
-}
+void set_i18n_language(std::string const& lang);
 
 std::string tr(char const* key) {
   int const active = g_i18n_active.load(std::memory_order_relaxed);
@@ -792,6 +829,8 @@ struct Launcher {
   GtkSearchEntry* search{nullptr};
   GtkListBox* results{nullptr};
   GtkLabel* status{nullptr};
+  GtkLabel* navigation_hint{nullptr};
+  GtkMenuButton* app_menu{nullptr};
   // Live AI answer panel (hidden until the backend pushes ai-stream).
   GtkWidget* ai_panel{nullptr};
   GtkLabel* ai_phase{nullptr};
@@ -815,6 +854,10 @@ struct Launcher {
   GtkApplication* app{nullptr};
   std::vector<ResultRow> rows;
   guint search_source{0};
+  guint focus_loss_source{0};
+  int host_settings_generation{0};
+  int theme_revision{0};
+  int hotkey_revision{0};
   // Matches the macOS/Windows hosts: only the newest query may paint, so a
   // slow completion can never overwrite a newer result set.
   std::atomic<int> search_generation{0};
@@ -863,16 +906,19 @@ struct Launcher {
 
   // ---- backend-rendered settings -------------------------------------------
 
-  // The theme setting is backend-owned; GTK can only ask for the dark
-  // variant explicitly — light/system fall back to the user's GTK theme.
-  // The panel stylesheet rides along: the dark glass is its own tone.
+  // Explicit light/dark uses GTK's built-in theme; system clears overrides.
   static void apply_theme(std::string const& theme) {
     GtkSettings* settings = gtk_settings_get_default();
     if (settings == nullptr) {
       return;
     }
-    g_object_set(settings, "gtk-application-prefer-dark-theme",
-                 theme == "dark" ? TRUE : FALSE, nullptr);
+    if (theme == "system") {
+      gtk_settings_reset_property(settings, "gtk-theme-name");
+      gtk_settings_reset_property(settings, "gtk-application-prefer-dark-theme");
+    } else {
+      g_object_set(settings, "gtk-theme-name", "Adwaita",
+                   "gtk-application-prefer-dark-theme", theme == "dark", nullptr);
+    }
     apply_panel_css();
   }
 
@@ -927,56 +973,57 @@ struct Launcher {
         }, nullptr);
   }
 
-  // One-time read of the backend-owned settings the host renders (hotkey,
+  struct HostSettings {
+    int generation{0};
+    int theme_revision{0};
+    int hotkey_revision{0};
+    std::string hotkey;
+    std::string theme;
+    std::string language;
+  };
+
+  void apply_host_settings(HostSettings const& values) {
+    if (values.generation != host_settings_generation || shutting_down.load()) return;
+    if (!values.language.empty()) set_i18n_language(values.language);
+    if (!values.hotkey.empty() && values.hotkey_revision == hotkey_revision) {
+      std::string note = apply_x11_hotkey(values.hotkey);
+      if (!note.empty()) set_status(note);
+    }
+    if (!values.theme.empty() && values.theme_revision == theme_revision) {
+      apply_theme(values.theme);
+    }
+  }
+
+  // Read the backend-owned settings the host renders (hotkey,
   // theme) plus the `language` key that steers the i18n table. The backend
   // pushes hotkey/theme changes afterwards via the reserved $state events;
-  // this seeds the initial values.
+  // this also refreshes language after a settings action.
   void pull_host_settings() {
     if (api == nullptr) {
       return;
     }
     auto* api_raw = api.get();
-    std::thread([api_raw]() mutable {
-      std::string hotkey;
-      std::string theme;
-      std::string language;
-      try {
-        hotkey = api_raw->get_hotkey().get();
-      } catch (...) {
-      }
-      try {
-        theme = api_raw->get_theme().get();
-      } catch (...) {
-      }
+    auto* values = new HostSettings;
+    values->generation = ++host_settings_generation;
+    values->theme_revision = theme_revision;
+    values->hotkey_revision = hotkey_revision;
+    std::thread([api_raw, values]() mutable {
       try {
         // Row shape per the backend settings-list contract: [key, value, …].
+        // One RPC provides a coherent snapshot rather than three mixed reads.
         for (auto const& row : api_raw->settings_list().get()) {
-          if (row.size() >= 2 && row[0] == "language") {
-            language = row[1];
-          }
+          if (row.size() < 2) continue;
+          if (row[0] == "language") values->language = row[1];
+          else if (row[0] == "theme") values->theme = row[1];
+          else if (row[0] == "hotkey") values->hotkey = row[1];
         }
       } catch (...) {
       }
       g_idle_add([](gpointer user_data) -> int {
-        std::unique_ptr<std::tuple<std::string, std::string, std::string>>
-            values(static_cast<std::tuple<std::string, std::string,
-                                          std::string>*>(user_data));
-        auto const& [hotkey, theme, language] = *values;
-        Launcher& launcher = Launcher::instance();
-        set_i18n_language(language);
-        apply_tray_language();
-        if (!hotkey.empty()) {
-          std::string note = apply_x11_hotkey(hotkey);
-          if (!note.empty()) {
-            launcher.set_status(note);
-          }
-        }
-        if (!theme.empty()) {
-          apply_theme(theme);
-        }
+        std::unique_ptr<HostSettings> values(static_cast<HostSettings*>(user_data));
+        Launcher::instance().apply_host_settings(*values);
         return G_SOURCE_REMOVE;
-      }, new std::tuple<std::string, std::string, std::string>(
-             std::move(hotkey), std::move(theme), std::move(language)));
+      }, values);
     }).detach();
   }
 
@@ -1162,6 +1209,8 @@ struct Launcher {
         g_idle_add([](gpointer user_data) -> int {
           std::unique_ptr<std::string> theme(
               static_cast<std::string*>(user_data));
+          auto& launcher = Launcher::instance();
+          ++launcher.theme_revision;
           apply_theme(*theme);
           return G_SOURCE_REMOVE;
         }, new std::string(std::move(value_copy)));
@@ -1177,6 +1226,7 @@ struct Launcher {
         g_idle_add([](gpointer user_data) -> int {
           std::unique_ptr<std::string> spec(
               static_cast<std::string*>(user_data));
+          ++Launcher::instance().hotkey_revision;
           std::string note = apply_x11_hotkey(*spec);
           if (!note.empty()) {
             Launcher::instance().set_status(note);
@@ -1227,15 +1277,17 @@ struct Launcher {
     int generation{0};
     std::vector<ResultRow> rows;
     std::string error;
+    std::string selected_arg;
   };
 
-  void run_search(std::string const& query) {
+  void run_search(std::string const& query, std::string selected_arg = {}) {
     if (api == nullptr || shutting_down.load(std::memory_order_acquire)) {
       return;
     }
     auto* api_raw = api.get();
     auto* boxed = new SearchOutcome;
     boxed->generation = search_generation.fetch_add(1) + 1;
+    boxed->selected_arg = std::move(selected_arg);
     std::thread([api_raw, query, boxed]() mutable {
       try {
         for (auto const& cells : api_raw->search(query).get()) {
@@ -1263,10 +1315,26 @@ struct Launcher {
       return;
     }
     rows = std::move(result.rows);
-    refresh_results();
+    refresh_results(result.selected_arg);
   }
 
-  void refresh_results() {
+  void scroll_to_selection() {
+    auto* selected = gtk_list_box_get_selected_row(results);
+    auto* scrolled = gtk_widget_get_ancestor(GTK_WIDGET(results),
+                                            GTK_TYPE_SCROLLED_WINDOW);
+    graphene_rect_t bounds{};
+    if (selected == nullptr || scrolled == nullptr ||
+        !gtk_widget_compute_bounds(GTK_WIDGET(selected), scrolled,
+                                    &bounds)) return;
+    auto* adjustment = gtk_scrolled_window_get_vadjustment(
+        GTK_SCROLLED_WINDOW(scrolled));
+    double const offset = gtk_adjustment_get_value(adjustment);
+    gtk_adjustment_clamp_page(adjustment, offset + bounds.origin.y,
+                             offset + bounds.origin.y + bounds.size.height);
+  }
+
+  void refresh_results(std::string const& selected_arg = {},
+                       std::string const& selected_id = "settings.set") {
     // Rebuild the list; simple and correct beats incremental cleverness at
     // this list size (≤ max-results rows).
     for (GtkWidget* child = gtk_widget_get_first_child(GTK_WIDGET(results));
@@ -1292,12 +1360,20 @@ struct Launcher {
       auto* texts = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
       gtk_widget_set_valign(texts, GTK_ALIGN_CENTER);
       gtk_widget_set_hexpand(texts, TRUE);
-      auto* title = gtk_label_new(row.title.c_str());
+      std::string title_text = row.title;
+      std::string subtitle_text = row.subtitle.empty() ? row.kind : row.subtitle;
+      if (row.id == "settings.set") {
+        std::string const key = "setting." + row.arg;
+        if (tr(key.c_str()) != key) {
+          title_text = tr(key.c_str()) + " (" + row.arg + ")";
+          subtitle_text = tr((key + ".description").c_str());
+        }
+      }
+      auto* title = gtk_label_new(title_text.c_str());
       gtk_label_set_xalign(GTK_LABEL(title), 0.0);
       gtk_label_set_ellipsize(GTK_LABEL(title), PANGO_ELLIPSIZE_END);
       gtk_widget_add_css_class(title, "fulcrum-row-title");
-      auto* subtitle = gtk_label_new(
-          row.subtitle.empty() ? row.kind.c_str() : row.subtitle.c_str());
+      auto* subtitle = gtk_label_new(subtitle_text.c_str());
       gtk_label_set_xalign(GTK_LABEL(subtitle), 0.0);
       gtk_label_set_ellipsize(GTK_LABEL(subtitle), PANGO_ELLIPSIZE_END);
       gtk_widget_add_css_class(subtitle, "fulcrum-row-subtitle");
@@ -1306,8 +1382,8 @@ struct Launcher {
       gtk_box_append(GTK_BOX(texts), subtitle);
       gtk_box_append(GTK_BOX(box), texts);
 
-      if (!row.badge.empty()) {
-        auto* badge = gtk_label_new(row.badge.c_str());
+      if (!row.badge.empty() || row.id == "settings.set") {
+        auto* badge = gtk_label_new(row.badge.empty() ? tr("notSet").c_str() : row.badge.c_str());
         gtk_widget_add_css_class(badge, "fulcrum-badge");
         gtk_widget_set_valign(badge, GTK_ALIGN_CENTER);
         gtk_box_append(GTK_BOX(box), badge);
@@ -1321,8 +1397,13 @@ struct Launcher {
       gtk_list_box_append(results, box);
     }
     if (!rows.empty()) {
+      auto selected = std::find_if(rows.begin(), rows.end(), [&](auto const& row) {
+        return row.id == selected_id && row.arg == selected_arg;
+      });
+      int const index = selected == rows.end() ? 0 :
+          static_cast<int>(std::distance(rows.begin(), selected));
       gtk_list_box_select_row(results,
-                              gtk_list_box_get_row_at_index(results, 0));
+                              gtk_list_box_get_row_at_index(results, index));
     }
   }
 
@@ -1389,6 +1470,7 @@ struct Launcher {
       index = 0;
     }
     ResultRow const row = rows[static_cast<std::size_t>(index)];
+    if (row.id == "settings.set") ++host_settings_generation;
     set_status("Running…");
     auto* api_raw = api.get();
     std::thread([api_raw, row]() mutable {
@@ -1447,6 +1529,14 @@ struct Launcher {
             // errors can be copied); keep the panel open.
             return G_SOURCE_REMOVE;
           }
+          if (job->action_id == "settings.set") {
+            auto& launcher = Launcher::instance();
+            launcher.set_status(tr("settingUpdated"));
+            launcher.pull_host_settings();
+            launcher.run_search(
+                gtk_editable_get_text(GTK_EDITABLE(launcher.search)), job->arg);
+            return G_SOURCE_REMOVE;
+          }
           if (job->status == "detail") {
             // FPP2 plugin detail: fetch the payload and show it in the
             // panel slot. The RPC runs on a worker thread; the paint
@@ -1492,6 +1582,7 @@ struct Launcher {
   }
 
   void show() {
+    cancel_focus_loss();
     actions_mode = false;
     dismiss_ai_panel();
     dismiss_detail_panel();
@@ -1501,7 +1592,17 @@ struct Launcher {
     gtk_window_present(window);
   }
 
-  void hide() { gtk_widget_set_visible(GTK_WIDGET(window), FALSE); }
+  void cancel_focus_loss() {
+    if (focus_loss_source != 0) {
+      g_source_remove(focus_loss_source);
+      focus_loss_source = 0;
+    }
+  }
+
+  void hide() {
+    cancel_focus_loss();
+    gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
+  }
 
   void toggle() {
     if (gtk_widget_get_visible(GTK_WIDGET(window))) {
@@ -1626,7 +1727,7 @@ struct Launcher {
           }, job);
         });
 
-    set_status("Ready — hotkey or `fulcrum --toggle`");
+    set_status(tr("ready"));
     run_search("");
     start_silent_update_check();
     pull_host_settings();
@@ -1648,6 +1749,38 @@ struct Launcher {
  private:
   std::unique_ptr<rivet::linux_runtime::Backend> backend_;
 };
+
+void set_i18n_language(std::string const& lang) {
+  int const active = (lang == "en") ? 1 : 0;
+  bool const changed = g_i18n_active.exchange(active) != active;
+  auto& launcher = Launcher::instance();
+  if (launcher.search != nullptr) {
+    gtk_search_entry_set_placeholder_text(launcher.search,
+                                          tr("searchPlaceholder").c_str());
+  }
+  if (launcher.navigation_hint != nullptr) {
+    gtk_label_set_text(launcher.navigation_hint, tr("navigationHint").c_str());
+  }
+  if (launcher.app_menu != nullptr) {
+    gtk_widget_set_tooltip_text(GTK_WIDGET(launcher.app_menu), tr("appMenu").c_str());
+    auto* menu = g_menu_new();
+    g_menu_append(menu, tr("trayRestart").c_str(), "app.restart");
+    g_menu_append(menu, tr("trayQuit").c_str(), "app.quit");
+    gtk_menu_button_set_menu_model(launcher.app_menu, G_MENU_MODEL(menu));
+    g_object_unref(menu);
+  }
+  if (changed && launcher.results != nullptr) {
+    auto* selected = gtk_list_box_get_selected_row(launcher.results);
+    int index = selected != nullptr ? gtk_list_box_row_get_index(selected) : -1;
+    std::string const arg = index >= 0 && index < static_cast<int>(launcher.rows.size())
+        ? launcher.rows[static_cast<std::size_t>(index)].arg : "";
+    std::string const id = index >= 0 && index < static_cast<int>(launcher.rows.size())
+        ? launcher.rows[static_cast<std::size_t>(index)].id : "";
+    launcher.refresh_results(arg, id);
+  }
+  if (changed && launcher.api != nullptr) launcher.set_status(tr("ready"));
+  apply_tray_language();
+}
 
 // ---- settings window ---------------------------------------------------------
 //
@@ -1713,8 +1846,12 @@ void settings_refresh_ai_status() {
 }
 
 void settings_write(std::string const& key, std::string const& value) {
-  auto* api_raw = Launcher::instance().api.get();
-  if (api_raw == nullptr || g_settings_form == nullptr || key.empty()) return;
+  if (g_settings_form == nullptr || key.empty()) return;
+  // A form edit supersedes any host snapshot requested before this write.
+  auto& launcher = Launcher::instance();
+  ++launcher.host_settings_generation;
+  auto* api_raw = launcher.api.get();
+  if (api_raw == nullptr) return;
   g_settings_form->values[key] = value;
   std::thread([api_raw, key, value]() {
     std::string error;
@@ -2152,6 +2289,11 @@ void tray_quit() {
   g_application_quit(G_APPLICATION(Launcher::instance().app));
 }
 
+void request_restart() {
+  g_restart_requested = true;
+  tray_quit();
+}
+
 // GNOME's stock "activate window menu" binding is <Alt>space — the
 // compositor consumes the summon key before the portal shortcut ever
 // sees it, and the consent UI does not resolve that for the user. When
@@ -2252,6 +2394,8 @@ std::vector<rivet::system::TrayMenuItem> tray_menu_items() {
   }
   items.push_back(rivet::system::TrayMenuItem(
       rivet::system::TrayMenuItem::Type::separator));
+  items.push_back(rivet::system::TrayMenuItem(
+      tr("trayRestart"), [] { request_restart(); }));
   items.push_back(
       rivet::system::TrayMenuItem(tr("trayQuit"), [] { tray_quit(); }));
   return items;
@@ -2434,6 +2578,7 @@ gboolean on_key_pressed(GtkEventControllerKey*, guint keyval, guint,
         gtk_list_box_select_row(launcher.results,
                                 gtk_list_box_get_row_at_index(launcher.results,
                                                               index));
+        launcher.scroll_to_selection();
       }
       return TRUE;
     }
@@ -2448,16 +2593,58 @@ gboolean on_key_pressed(GtkEventControllerKey*, guint keyval, guint,
 
 void on_window_active_changed(GObject* obj, GParamSpec*, gpointer) {
   auto* gtk_window = GTK_WINDOW(obj);
-  // Hide on focus loss, matching the other platform hosts.
-  if (!gtk_window_is_active(gtk_window) &&
-      gtk_widget_get_visible(GTK_WIDGET(gtk_window))) {
-    Launcher::instance().hide();
-  }
+  auto& launcher = Launcher::instance();
+  launcher.cancel_focus_loss();
+  if (gtk_window_is_active(gtk_window) ||
+      !gtk_widget_get_visible(GTK_WIDGET(gtk_window))) return;
+  // Allow focus handoffs to settle before dismissing the launcher.
+  launcher.focus_loss_source = g_timeout_add(150, [](gpointer) -> gboolean {
+    auto& launcher = Launcher::instance();
+    if (gtk_widget_get_visible(GTK_WIDGET(launcher.window)) &&
+        !gtk_window_is_active(launcher.window)) {
+      // Window-manager moves can temporarily take focus while a button is held.
+      auto* display = gtk_widget_get_display(GTK_WIDGET(launcher.window));
+      auto* seat = gdk_display_get_default_seat(display);
+      auto* pointer = seat != nullptr ? gdk_seat_get_pointer(seat) : nullptr;
+      GdkModifierType modifiers = GdkModifierType(0);
+      if (pointer != nullptr) {
+        gdk_surface_get_device_position(
+            gtk_native_get_surface(GTK_NATIVE(launcher.window)), pointer,
+            nullptr, nullptr, &modifiers);
+      }
+      if ((modifiers & (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK)) != 0)
+        return G_SOURCE_CONTINUE;
+      auto* windows = gtk_window_get_toplevels();
+      for (guint i = 0; i < g_list_model_get_n_items(windows); ++i) {
+        auto* candidate = GTK_WINDOW(g_list_model_get_item(windows, i));
+        bool owned_active = false;
+        if (gtk_window_is_active(candidate)) {
+          for (auto* parent = gtk_window_get_transient_for(candidate);
+               parent != nullptr; parent = gtk_window_get_transient_for(parent)) {
+            if (parent == launcher.window) owned_active = true;
+          }
+        }
+        g_object_unref(candidate);
+        // Recheck when a launcher-owned dialog loses focus as well.
+        if (owned_active) return G_SOURCE_CONTINUE;
+      }
+      launcher.focus_loss_source = 0;
+      launcher.hide();
+    }
+    launcher.focus_loss_source = 0;
+    return G_SOURCE_REMOVE;
+  }, nullptr);
 }
 
 void on_activate(GtkApplication* app, gpointer) {
   Launcher& launcher = Launcher::instance();
   launcher.app = app;  // tray quit routes through GApplication's shutdown
+  GActionEntry actions[2]{};
+  actions[0].name = "restart";
+  actions[0].activate = [](GSimpleAction*, GVariant*, gpointer) { request_restart(); };
+  actions[1].name = "quit";
+  actions[1].activate = [](GSimpleAction*, GVariant*, gpointer) { tray_quit(); };
+  g_action_map_add_action_entries(G_ACTION_MAP(app), actions, 2, nullptr);
 
   // The panel hides on focus loss; without a hold, GTK would treat the
   // hidden window as "last window closed" and shut the whole app down.
@@ -2492,6 +2679,15 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_widget_set_margin_start(search, 10);
   gtk_widget_set_margin_end(search, 10);
   launcher.search = GTK_SEARCH_ENTRY(search);
+  gtk_widget_set_hexpand(search, TRUE);
+  auto* search_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  auto* app_menu = gtk_menu_button_new();
+  gtk_menu_button_set_icon_name(GTK_MENU_BUTTON(app_menu), "open-menu-symbolic");
+  gtk_widget_set_margin_top(app_menu, 10);
+  gtk_widget_set_margin_end(app_menu, 10);
+  launcher.app_menu = GTK_MENU_BUTTON(app_menu);
+  gtk_box_append(GTK_BOX(search_row), search);
+  gtk_box_append(GTK_BOX(search_row), app_menu);
 
   auto* status = gtk_label_new("Starting embedded Racket CS…");
   gtk_label_set_xalign(GTK_LABEL(status), 0.0);
@@ -2570,6 +2766,7 @@ void on_activate(GtkApplication* app, gpointer) {
   launcher.detail_meta = GTK_LABEL(detail_meta);
 
   auto* scrolled = gtk_scrolled_window_new();
+  gtk_widget_set_vexpand(scrolled, TRUE);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   auto* results = gtk_list_box_new();
@@ -2579,6 +2776,7 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), results);
 
   auto* hint = gtk_label_new("↑↓ navigate · ↵ run · esc hide — Fulcrum");
+  launcher.navigation_hint = GTK_LABEL(hint);
   gtk_label_set_xalign(GTK_LABEL(hint), 0.0);
   gtk_widget_add_css_class(hint, "caption");
   gtk_widget_add_css_class(hint, "dim-label");
@@ -2586,13 +2784,14 @@ void on_activate(GtkApplication* app, gpointer) {
   gtk_widget_set_margin_top(hint, 4);
   gtk_widget_set_margin_bottom(hint, 8);
 
-  gtk_box_append(GTK_BOX(root), search);
+  gtk_box_append(GTK_BOX(root), search_row);
   gtk_box_append(GTK_BOX(root), status);
   gtk_box_append(GTK_BOX(root), ai_panel);
   gtk_box_append(GTK_BOX(root), detail_panel);
   gtk_box_append(GTK_BOX(root), scrolled);
   gtk_box_append(GTK_BOX(root), hint);
   gtk_window_set_child(launcher.window, root);
+  set_i18n_language(g_i18n_active.load() == 0 ? "zh" : "en");
 
   g_signal_connect(search, "search-changed",
                    G_CALLBACK(on_search_changed), nullptr);
@@ -2692,15 +2891,14 @@ void on_activate(GtkApplication* app, gpointer) {
 }
 
 void on_shutdown(GApplication*, gpointer) {
+  Launcher::instance().cancel_focus_loss();
   g_x11_hotkey.stop();
   Launcher::instance().stop_backend();
 }
 
 }  // namespace
 
-int main(int argc, char** argv) {
-  (void)argc;
-  (void)argv;  // --toggle is handled through the lease / activate() below.
+int run_application() {
   // The first-party rivet lease replaces the old pid-file + SIGUSR1 scheme:
   // second launches forward --toggle to the primary and exit.
   rivet::system::SingleInstanceLease lease("site.jrtx.fulcrum");
@@ -2729,5 +2927,17 @@ int main(int argc, char** argv) {
   int const status =
       g_application_run(G_APPLICATION(app), 0, nullptr);
   g_object_unref(app);
+  return status;
+}
+
+int main(int, char**) {
+  std::string const executable = executable_path().string();
+  int const status = run_application();
+  // Release the single-instance lease and stop the backend before re-exec.
+  if (g_restart_requested) {
+    execl(executable.c_str(), executable.c_str(), static_cast<char*>(nullptr));
+    std::cerr << "fulcrum: restart failed: " << g_strerror(errno) << '\n';
+    return 1;
+  }
   return status;
 }

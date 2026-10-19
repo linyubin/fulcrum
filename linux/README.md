@@ -13,6 +13,12 @@ Launcher-specific parts on top of the official runtime:
   invisible app wherever the summon path isn't alive yet (before the
   portal consent, after a reboot, a rejected grab). Esc or focus loss
   hides it again.
+- **Dragging and appearance** — window-manager moves keep the panel open
+  while a mouse button is held. Language and explicit light/dark theme
+  changes apply to the existing window; System restores the desktop GTK
+  theme. The menu beside the search field and the tray both offer Restart
+  Fulcrum and Quit Fulcrum. Restart stops the backend and releases the
+  single-instance lease before replacing the process image.
 - **Global hotkey, portal-first** — where `org.freedesktop.portal`
   `GlobalShortcuts` exists (GNOME 48+, KDE, recent wlroots compositors),
   the summon shortcut is registered there: the compositor asks for
@@ -59,6 +65,31 @@ memory limits, and clean up the server on exit. They exercise the actual X11
 listener with ordinary window events, injected key chords, lock keys,
 autorepeat, conflicting grabs, rebinding, and shutdown. They do not start the
 launcher, access its backend or clipboard, or validate a complete native app.
+
+## Settings preview
+
+The launcher with Chinese labels, a selected setting, and current-value badges
+(sample rows rendered by the native widgets; no backend is connected):
+
+![Linux launcher settings](../docs/images/linux-settings-preview.png)
+
+## Widget regression tests
+
+After `rtk proxy raco rivet build`, run:
+
+Requires `xvfb` (including `xvfb-run`), `xauth`, and `dbus-run-session`.
+
+```bash
+rtk proxy cmake --build .rivet/build/linux --target fulcrum-ui-test
+rtk proxy xvfb-run -a -s "-screen 0 1280x800x24 -nolisten tcp" dbus-run-session -- timeout 30s .rivet/build/linux/fulcrum-ui-test
+```
+
+The fixture uses the launcher's real GTK widgets with sample rows. It checks
+candidate visibility, setting badges, keyboard scrolling, internal clicks,
+temporary focus loss, owned dialogs, and dismissal on sustained external
+focus loss. Its executable has no adjacent runtime, so it does not start the
+backend or access clipboard history. These checks use a private virtual
+display; desktop compositor behavior still needs a real-session check.
 
 The X11 fallback owns a separate connection and grabs the root window so it
 works while the launcher is hidden. Do not attach a second event reader to

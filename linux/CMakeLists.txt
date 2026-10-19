@@ -44,3 +44,8 @@ target_link_libraries(RivetHost PRIVATE
 )
 
 target_compile_options(RivetHost PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(fulcrum-ui-test EXCLUDE_FROM_ALL ../tests/linux-ui-test.cpp)
+target_include_directories(fulcrum-ui-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(fulcrum-ui-test PRIVATE rivet::platform X11 X11::Xtst)
+target_compile_options(fulcrum-ui-test PRIVATE -Wall -Wextra -Wpedantic)
