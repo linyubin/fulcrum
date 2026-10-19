@@ -20,6 +20,22 @@ void pump(int milliseconds) {
   } while (std::chrono::steady_clock::now() < end);
 }
 
+bool selected_row_is_visible(GtkListBox* results, GtkWidget* scrolled, int index) {
+  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  do {
+    // GTK scroll/layout updates may complete on a later frame in CI.
+    pump(10);
+    auto* selected = gtk_list_box_get_selected_row(results);
+    graphene_rect_t bounds{};
+    if (selected != nullptr && gtk_list_box_row_get_index(selected) == index &&
+        gtk_widget_compute_bounds(GTK_WIDGET(selected), scrolled, &bounds) &&
+        bounds.origin.y >= -1 &&
+        bounds.origin.y + bounds.size.height <= gtk_widget_get_height(scrolled) + 1)
+      return true;
+  } while (std::chrono::steady_clock::now() < deadline);
+  return false;
+}
+
 bool has_label(GtkWidget* widget, char const* text) {
   if (GTK_IS_LABEL(widget) &&
       std::string(gtk_label_get_text(GTK_LABEL(widget))) == text) return true;
@@ -84,13 +100,9 @@ int main() {
     on_key_pressed(nullptr, GDK_KEY_Down, 0, GdkModifierType(0), nullptr);
     pump(20);
   }
-  auto* selected = gtk_list_box_get_selected_row(launcher.results);
-  graphene_rect_t bounds{};
-  bool measured = gtk_widget_compute_bounds(GTK_WIDGET(selected), scrolled, &bounds);
-  check(gtk_list_box_row_get_index(selected) == 11 && measured &&
-            bounds.origin.y >= -1 &&
-            bounds.origin.y + bounds.size.height <= gtk_widget_get_height(scrolled) + 1,
+  check(selected_row_is_visible(launcher.results, scrolled, 11),
         "keyboard selection scrolls the last candidate into view");
+  auto* selected = gtk_list_box_get_selected_row(launcher.results);
   check((gtk_widget_get_state_flags(GTK_WIDGET(selected)) & GTK_STATE_FLAG_SELECTED) != 0,
         "keyboard selection remains highlighted");
   Launcher::SearchOutcome refreshed;
@@ -99,11 +111,7 @@ int main() {
   refreshed.selected_arg = "option-11";
   launcher.apply_search(std::move(refreshed));
   pump(80);
-  selected = gtk_list_box_get_selected_row(launcher.results);
-  measured = gtk_widget_compute_bounds(GTK_WIDGET(selected), scrolled, &bounds);
-  check(gtk_list_box_row_get_index(selected) == 11 && measured &&
-            bounds.origin.y >= -1 &&
-            bounds.origin.y + bounds.size.height <= gtk_widget_get_height(scrolled) + 1,
+  check(selected_row_is_visible(launcher.results, scrolled, 11),
         "setting refresh preserves the visible selected option");
 
   auto* surface = gtk_native_get_surface(GTK_NATIVE(launcher.window));
