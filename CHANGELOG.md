@@ -6,6 +6,44 @@ independently per platform packaging run.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-20
+
+### Fixed
+
+- **The Linux panel stops fighting the window manager.** Dragging the panel
+  no longer hides it mid-move — dismissal is deferred during pointer-held
+  moves and brief focus handoffs, while sustained external focus loss still
+  dismisses as before. Keyboard navigation scrolls the selected row fully
+  into view (current-setting badges and an explicit empty state included),
+  and theme/language edits apply immediately: light/dark GTK themes apply
+  at once, System restores the desktop override, translations refresh, and
+  a stale host-settings snapshot is rejected instead of overwriting newer
+  edits — in the quick actions and the independent settings window alike.
+  A `Restart Fulcrum` action joins the search box and the tray: it stops
+  the backend, releases the single-instance lease, and executes the
+  application again.
+
+- **Windows updates finish themselves.** After a verified download the
+  install row hands the MSI to `msiexec` (`/passive /norestart`) and
+  Fulcrum relaunches when the installer is done, via the same
+  quit-and-install handoff macOS already uses — previously Windows stopped
+  at "open the updates folder and run it yourself". The manual row remains
+  as a fallback, and a persisted installer failure is surfaced in the
+  status UI on the next launch.
+
+- **AppImage installs receive AppImage updates.** The signed channel
+  manifest now publishes the x64 and arm64 AppImage payloads beside the
+  tar.gz entries, and a Fulcrum actually running as an AppImage selects
+  the authenticated AppImage entry for self-update; portable tar.gz
+  installs keep their existing unfiltered path, and deb/rpm stay owned by
+  the package manager.
+
+- **The file-search gap row names the real missing tool.** Every platform
+  has a search provider; the unavailability row — shown only when the
+  platform's tool is absent from PATH — now says what to install per
+  platform (mdfind / locate or find / PowerShell) instead of always
+  claiming macOS Spotlight.
+
 ## [0.13.0] - 2026-10-17
 
 ### Added
