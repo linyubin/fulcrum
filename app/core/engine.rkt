@@ -422,8 +422,9 @@
 
 (define find-file-prefix "find ")
 
-;; `find <query>` claims file search; on non-macOS platforms one honest
-;; row explains the gap instead of pretending to search.
+;; `find <query>` claims file search. All three platforms have a real
+;; provider (files.rkt); the honest row below appears only when the
+;; platform's search tool is missing entirely, naming what would restore it.
 (define (files-provider engine)
   (lambda (query)
     (if (not (string-prefix? (string-downcase query) find-file-prefix))
@@ -439,8 +440,11 @@
                             (car hit)
                             85))
                   (list (result "noop"
-                                "File search needs Spotlight (macOS)"
-                                "the Linux and Windows providers arrive with their platform search indexes"
+                                (case (system-type 'os)
+                                  [(macosx) "File search needs mdfind (Spotlight CLI)"]
+                                  [(windows) "File search needs PowerShell"]
+                                  [else "File search needs locate or find"])
+                                "no search tool on PATH — install one and this turns into real results"
                                 "File" "" "doc" "" ""
                                 "find file search"
                                 85))))))))
