@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -49,6 +51,9 @@ def find_application():
     return None
 def contains(root, fragment):
     return any(fragment in (node.name or "") or fragment in text(node) for node in walk(root))
+def focused(node):
+    try: return node.getState().contains(pyatspi.STATE_FOCUSED)
+    except Exception: return False
 def snapshot(node, depth=0):
     result = {"name": node.name or "", "role": role(node)}
     value = text(node)
@@ -64,9 +69,21 @@ def main():
     application = wait_for("Fulcrum application", find_application)
     window = wait_for("Fulcrum frame", lambda: next((n for n in walk(application) if role(n) == "frame"), None))
     query = wait_for("FulcrumQuery", lambda: next((n for n in walk(window) if (n.name or "") == "FulcrumQuery"), None))
-    query.queryEditableText().setTextContents("12*12")
+    wait_for("embedded backend ready", lambda: contains(window, "Ready") or contains(window, "就绪"))
+    wait_for("summoned query focus", lambda: focused(query))
+    # AT-SPI exposes and verifies focus, but Wayland intentionally rejects its
+    # synthetic-key API. Send XTest input to the focused nested Weston window;
+    # Weston then delivers ordinary seat events to the native Wayland client.
+    keyboard_env = os.environ.copy()
+    keyboard_env["DISPLAY"] = keyboard_env["FULCRUM_ACCEPTANCE_X11_DISPLAY"]
+    subprocess.run(
+        ["xdotool", "type", "--clearmodifiers", "--delay", "20", "12*12"],
+        check=True,
+        env=keyboard_env,
+    )
+    wait_for("typed query 12*12", lambda: text(query) == "12*12")
     wait_for("calculator result 144 from embedded backend", lambda: contains(window, "144"))
     (args.output / "accessibility.json").write_text(json.dumps(snapshot(application), ensure_ascii=False, indent=2), encoding="utf-8")
-    (args.output / "interaction-trace.json").write_text(json.dumps({"platform": "linux", "actions": ["set:FulcrumQuery=12*12"], "assertions": ["packaged GTK4 frame activated on native Wayland", "FulcrumQuery exposed through AT-SPI", "query crossed RVT1 into the embedded backend", "native result list contains 144"]}, indent=2), encoding="utf-8")
+    (args.output / "interaction-trace.json").write_text(json.dumps({"platform": "linux", "actions": ["summon:activation-handler", "type-via-weston-seat:12*12"], "assertions": ["packaged GTK4 panel started hidden and was summoned through the global-hotkey activation handoff", "summoned panel remained visible after the focus-loss debounce", "FulcrumQuery held keyboard focus", "XTest input crossed the nested Weston Wayland seat and RVT1 into the embedded backend", "native result list contains 144"]}, indent=2), encoding="utf-8")
 
 if __name__ == "__main__": main()

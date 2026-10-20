@@ -209,7 +209,11 @@ int main() {
   on_window_active_changed(G_OBJECT(launcher.window), nullptr, nullptr);
   check(gtk_widget_get_visible(GTK_WIDGET(launcher.window)),
         "transient inactive notification does not immediately hide the panel");
+  pump(250);
+  check(gtk_widget_get_visible(GTK_WIDGET(launcher.window)),
+        "a summoned panel cannot hide before its first compositor activation");
   focus(launcher.window);
+  on_window_active_changed(G_OBJECT(launcher.window), nullptr, nullptr);
   pump(250);
   check(gtk_widget_get_visible(GTK_WIDGET(launcher.window)),
         "panel stays visible when focus returns during the handoff");
@@ -223,6 +227,7 @@ int main() {
   gtk_window_set_transient_for(other, nullptr);
   launcher.show();
   focus(launcher.window);
+  on_window_active_changed(G_OBJECT(launcher.window), nullptr, nullptr);
   XTestFakeButtonEvent(display, 1, True, CurrentTime);
   XSync(display, False);
   pump(30);
@@ -234,6 +239,7 @@ int main() {
   XSync(display, False);
   launcher.show();
   focus(launcher.window);
+  on_window_active_changed(G_OBJECT(launcher.window), nullptr, nullptr);
   focus(other);
   pump(250);
   check(!gtk_widget_get_visible(GTK_WIDGET(launcher.window)),
