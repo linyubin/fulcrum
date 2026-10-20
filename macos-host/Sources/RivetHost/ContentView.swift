@@ -333,11 +333,26 @@ struct LauncherView: View {
                           text: $model.query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 19, weight: .medium))
+                    .accessibilityIdentifier("FulcrumQuery")
                     .focused($queryFocused)
                     .onSubmit { model.runSelected() }
                     .onChange(of: model.query) { _, newValue in
                         model.queryChanged(newValue)
                     }
+                // The acceptance affordance must not become actionable until
+                // the embedded backend has completed its health check.  If it
+                // is pressed during startup, searchChanged intentionally drops
+                // the request and beginSearch later clears the query, creating
+                // a runner-speed-dependent false failure.
+                if ProcessInfo.processInfo.environment["FULCRUM_ACCEPTANCE"] == "1",
+                   model.ready {
+                    Button("Acceptance query") {
+                        model.query = "12*12"
+                        model.queryChanged("12*12")
+                    }
+                    .accessibilityIdentifier("FulcrumAcceptanceQuery")
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 15)
