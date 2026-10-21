@@ -257,6 +257,10 @@ bool g_restart_requested{false};
 // settings row open it.
 void show_settings_window();
 
+// Panel placement follows the pointer across monitors (defined later, after
+// the X11 helpers it leans on; declared here for Launcher::show).
+void place_panel_on_pointer_monitor(GtkWindow* panel);
+
 std::filesystem::path executable_path() {
   return std::filesystem::read_symlink("/proc/self/exe");
 }
@@ -1643,6 +1647,10 @@ struct Launcher {
     dismiss_detail_panel();
     gtk_editable_set_text(GTK_EDITABLE(search), "");
     run_search("");
+    // Realize first so the X window exists, then position it on the pointer's
+    // monitor while still unmapped — the WM honors that at map time.
+    gtk_widget_realize(GTK_WIDGET(window));
+    place_panel_on_pointer_monitor(window);
     gtk_widget_set_visible(GTK_WIDGET(window), TRUE);
     auto* display = gtk_widget_get_display(GTK_WIDGET(window));
     if (GDK_IS_X11_DISPLAY(display)) {
@@ -2347,6 +2355,70 @@ void show_settings_window() {
 }
 
 // ---- X11 global hotkey ----------------------------------------------------
+
+// The panel is a positionless UTILITY toplevel, so the WM drops it on the
+// first monitor's origin (an external screen on multi-head desks). Summon
+// should follow the user instead: place the panel centered on whichever
+// monitor currently holds the pointer, before the window maps.
+void place_panel_on_pointer_monitor(GtkWindow* panel) {
+  auto* widget = GTK_WIDGET(panel);
+  auto* display = gtk_widget_get_display(widget);
+  if (GDK_IS_X11_DISPLAY(display) == 0) return;  // Wayland compositors own placement
+  auto* xdisplay = gdk_x11_display_get_xdisplay(GDK_X11_DISPLAY(display));
+  Window root = DefaultRootWindow(xdisplay);
+  Window child;
+  int pointer_x = 0, pointer_y = 0, win_x = 0, win_y = 0;
+  unsigned int mask = 0;
+  if (XQueryPointer(xdisplay, root, &root, &child, &pointer_x, &pointer_y,
+                    &win_x, &win_y, &mask) == False) {
+    pointer_x = pointer_y = -1;  // pointer unknown: fall back to monitor 0
+  }
+  GdkMonitor* monitor = nullptr;
+  // GDK4 dropped gdk_display_get_monitor_at_point; match the geometry by hand.
+  auto* monitors = gdk_display_get_monitors(display);
+  for (guint i = 0; i < g_list_model_get_n_items(monitors); ++i) {
+    auto* candidate = GDK_MONITOR(g_list_model_get_item(monitors, i));
+    GdkRectangle g{};
+    gdk_monitor_get_geometry(candidate, &g);
+    bool contains = pointer_x >= g.x && pointer_x < g.x + g.width &&
+                    pointer_y >= g.y && pointer_y < g.y + g.height;
+    if (contains) {
+      monitor = candidate;
+      break;
+    }
+    g_object_unref(candidate);
+  }
+  if (monitor == nullptr) {
+    monitor = GDK_MONITOR(g_list_model_get_item(monitors, 0));
+  }
+  GdkRectangle m{};
+  gdk_monitor_get_geometry(monitor, &m);
+  int width = gtk_widget_get_width(widget);
+  int height = gtk_widget_get_height(widget);
+  if (width <= 1) width = 680;   // pre-layout fallbacks match the default size
+  if (height <= 1) height = 460;
+  int const x = m.x + (m.width - width) / 2;
+  int const y = m.y + (m.height - height) / 2;
+  GdkSurface* surface = gtk_native_get_surface(GTK_NATIVE(panel));
+  if (GDK_IS_X11_SURFACE(surface)) {
+    Window const xid = gdk_x11_surface_get_xid(GDK_X11_SURFACE(surface));
+    // USPosition tells the WM the program chose this spot; without the hint
+    // mutter re-places the window itself and the move is lost at map time.
+    XSizeHints hints{};
+    long supplied = 0;
+    if (XGetWMNormalHints(xdisplay, xid, &hints, &supplied) == 0) {
+      hints.flags = 0;  // merge, never drop GTK's own size constraints
+    }
+    hints.flags |= USPosition;
+    hints.x = x;
+    hints.y = y;
+    XSetWMNormalHints(xdisplay, xid, &hints);
+    // Moving before map: the WM reads the program position when it places
+    // the newly mapped window, so the panel never flashes on the wrong head.
+    XMoveWindow(xdisplay, xid, x, y);
+    XFlush(xdisplay);
+  }
+}
 
 std::string install_x11_hotkey(GdkDisplay* display) {
   if (GDK_IS_X11_DISPLAY(display) == 0) {
